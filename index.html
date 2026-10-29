@@ -597,14 +597,158 @@
     }
 
     /* Map Container */
+    /* Map Container & Tactical Map Upgrades */
+    #map-panel-wrapper {
+      display: none;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid var(--border-tac);
+    }
+
+    .map-controls-bar {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .map-top-controls {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+    }
+
+    .map-top-controls select {
+      flex: 1;
+      min-width: 140px;
+      min-height: 38px;
+      padding: 6px 10px;
+      font-size: 0.82rem;
+    }
+
+    .map-pin-counter {
+      font-size: 0.76rem;
+      font-weight: 800;
+      color: var(--accent-brass);
+      background-color: #141617;
+      border: 1px solid var(--border-tac);
+      padding: 6px 10px;
+      border-radius: 4px;
+      white-space: nowrap;
+    }
+
+    .map-locate-btn {
+      min-height: 38px;
+      padding: 6px 12px;
+      font-size: 0.76rem;
+      white-space: nowrap;
+    }
+
+    .map-status-chips {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      padding-bottom: 4px;
+      scrollbar-width: none;
+    }
+    .map-status-chips::-webkit-scrollbar {
+      display: none;
+    }
+
+    .map-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+      padding: 6px 10px;
+      min-height: 32px;
+      font-size: 0.72rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      background-color: #141617;
+      border: 1px solid var(--border-tac);
+      border-radius: 4px;
+      color: var(--text-muted);
+      cursor: pointer;
+      user-select: none;
+      opacity: 0.45;
+      transition: opacity 0.15s, border-color 0.15s;
+    }
+
+    .map-chip.active {
+      opacity: 1;
+      color: var(--text-main);
+      border-color: var(--accent-brass);
+      background-color: var(--bg-charcoal);
+    }
+
+    .map-dot {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .map-dot-unvisited { background-color: #5a6268; border: 1px solid #181a1b; }
+    .map-dot-no-answer { background-color: #a68966; border: 1px solid #181a1b; }
+    .map-dot-not-interested { background-color: #8c4a3c; border: 1px solid #181a1b; }
+    .map-dot-follow-up { background-color: #5c6b43; border: 1px solid #181a1b; }
+    .map-dot-sold { background-color: #c8a253; border: 1px solid #181a1b; }
+    .map-dot-dnv { background-color: #1c1e1f; border: 1.5px solid #d4cfc7; }
+    .map-dot-user {
+      background-color: #eae6df;
+      border: 2px solid #c8a253;
+      border-radius: 2px;
+      transform: rotate(45deg);
+    }
+
     #map-container {
-      height: 240px;
+      height: 280px;
       width: 100%;
       background-color: #141617;
       border: 1px solid var(--border-tac);
       border-radius: 4px;
-      margin-top: 10px;
       display: none;
+    }
+
+    .map-legend {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 6px 10px;
+      background-color: #141617;
+      border: 1px solid var(--border-tac);
+      border-radius: 4px;
+      padding: 8px 10px;
+      margin-top: 8px;
+      font-size: 0.72rem;
+      color: var(--text-muted);
+    }
+
+    .map-legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* User GPS Marker Icon */
+    .tac-user-gps-icon {
+      background: transparent;
+      border: none;
+    }
+
+    .tac-user-gps-diamond {
+      width: 16px;
+      height: 16px;
+      background-color: #eae6df;
+      border: 3px solid #c8a253;
+      box-shadow: 0 0 6px rgba(0, 0, 0, 0.85);
+      transform: rotate(45deg);
     }
 
     /* Toast Notification */
@@ -732,9 +876,56 @@
             <option value="Zee">Zee</option>
           </select>
         </div>
-        <div id="map-container"></div>
-        <div id="map-offline-notice" style="display:none; font-size:0.75rem; color:var(--text-muted); margin-top:6px;">
-          [OFFLINE MODE] Map tiles unavailable. Coordinate bearing & route queue active.
+        <div id="map-panel-wrapper">
+          <div class="map-controls-bar">
+            <div class="map-top-controls">
+              <select id="map-seller-filter" onchange="onMapSellerFilterChange()" aria-label="Filter pins by seller">
+                <option value="ALL">All sellers</option>
+                <option value="Cham">Cham</option>
+                <option value="Roo">Roo</option>
+                <option value="Zee">Zee</option>
+                <option value="NONE">Not yet visited</option>
+              </select>
+              <span id="map-pin-count" class="map-pin-counter mono">0 Pins</span>
+              <button type="button" class="btn btn-fde map-locate-btn" onclick="locateUserOnMap()">Locate Me</button>
+            </div>
+
+            <div class="map-status-chips" id="map-status-chips">
+              <button type="button" class="map-chip active" data-status="Unvisited" onclick="toggleMapStatusFilter('Unvisited')">
+                <span class="map-dot map-dot-unvisited"></span>Unvisited
+              </button>
+              <button type="button" class="map-chip active" data-status="Knocked - No Answer" onclick="toggleMapStatusFilter('Knocked - No Answer')">
+                <span class="map-dot map-dot-no-answer"></span>No Answer
+              </button>
+              <button type="button" class="map-chip active" data-status="Not Interested" onclick="toggleMapStatusFilter('Not Interested')">
+                <span class="map-dot map-dot-not-interested"></span>Not Int
+              </button>
+              <button type="button" class="map-chip active" data-status="Interested - Follow Up" onclick="toggleMapStatusFilter('Interested - Follow Up')">
+                <span class="map-dot map-dot-follow-up"></span>Follow Up
+              </button>
+              <button type="button" class="map-chip active" data-status="Sold" onclick="toggleMapStatusFilter('Sold')">
+                <span class="map-dot map-dot-sold"></span>Sold
+              </button>
+              <button type="button" class="map-chip active" data-status="Do Not Visit" onclick="toggleMapStatusFilter('Do Not Visit')">
+                <span class="map-dot map-dot-dnv"></span>Do Not Visit
+              </button>
+            </div>
+          </div>
+
+          <div id="map-container"></div>
+
+          <div id="map-offline-notice" style="display:none; font-size:0.75rem; color:var(--text-muted); margin-top:6px;">
+            [OFFLINE MODE] Map tiles unavailable. Coordinate bearing &amp; route queue active.
+          </div>
+
+          <div class="map-legend">
+            <div class="map-legend-item"><span class="map-dot map-dot-unvisited"></span>Unvisited</div>
+            <div class="map-legend-item"><span class="map-dot map-dot-no-answer"></span>Knocked - No Answer</div>
+            <div class="map-legend-item"><span class="map-dot map-dot-not-interested"></span>Not Interested</div>
+            <div class="map-legend-item"><span class="map-dot map-dot-follow-up"></span>Interested - Follow Up</div>
+            <div class="map-legend-item"><span class="map-dot map-dot-sold"></span>Sold</div>
+            <div class="map-legend-item"><span class="map-dot map-dot-dnv"></span>Do Not Visit</div>
+          </div>
         </div>
       </div>
 
@@ -9885,9 +10076,21 @@
     let collapsedStreets = {};
 
     // Optional Leaflet Map instances
+    // Optional Leaflet Map instances & filter state
     let leafletMap = null;
     let leafletMarkers = [];
     let mapVisible = false;
+    let userLocationMarker = null;
+    let userAccuracyCircle = null;
+    let mapSellerFilter = "ALL";
+    let mapVisibleStatuses = {
+      "Unvisited": true,
+      "Knocked - No Answer": true,
+      "Not Interested": true,
+      "Interested - Follow Up": true,
+      "Sold": true,
+      "Do Not Visit": true
+    };
 
     /* =========================================================================
        INITIALIZATION & STORAGE
@@ -10362,21 +10565,48 @@
     /* =========================================================================
        OPTIONAL LEAFLET MAP (OFFLINE-SAFE DEGRADATION)
        ========================================================================= */
-    function toggleRouteMap() {
+    /* =========================================================================
+       OPTIONAL LEAFLET MAP (OFFLINE-SAFE DEGRADATION + TACTICAL FILTERS)
+       ========================================================================= */
+    function getTacticalPinStyle(status) {
+      switch (status) {
+        case "Unvisited":
+          return { fillColor: "#5a6268", color: "#181a1b", weight: 2 };
+        case "Knocked - No Answer":
+          return { fillColor: "#a68966", color: "#181a1b", weight: 2 };
+        case "Not Interested":
+          return { fillColor: "#8c4a3c", color: "#181a1b", weight: 2 };
+        case "Interested - Follow Up":
+          return { fillColor: "#5c6b43", color: "#181a1b", weight: 2 };
+        case "Sold":
+          return { fillColor: "#c8a253", color: "#181a1b", weight: 2 };
+        case "Do Not Visit":
+          return { fillColor: "#1c1e1f", color: "#d4cfc7", weight: 2 };
+        default:
+          return { fillColor: "#5a6268", color: "#181a1b", weight: 2 };
+      }
+    }
+
+    function toggleMap() {
+      const wrapper = document.getElementById("map-panel-wrapper");
       const container = document.getElementById("map-container");
       const notice = document.getElementById("map-offline-notice");
       mapVisible = !mapVisible;
 
       if (!mapVisible) {
-        container.style.display = "none";
-        notice.style.display = "none";
+        if (wrapper) wrapper.style.display = "none";
+        if (container) container.style.display = "none";
+        if (notice) notice.style.display = "none";
         return;
       }
 
-      container.style.display = "block";
+      if (wrapper) wrapper.style.display = "block";
+      if (container) container.style.display = "block";
+
       if (typeof window.L === "undefined") {
-        container.style.display = "none";
-        notice.style.display = "block";
+        if (container) container.style.display = "none";
+        if (notice) notice.style.display = "block";
+        updateMapMarkers();
         return;
       }
 
@@ -10388,54 +10618,158 @@
             attribution: "&copy; OpenStreetMap"
           });
           tileLayer.on("tileerror", () => {
-            notice.style.display = "block";
+            if (notice) notice.style.display = "block";
           });
           tileLayer.addTo(leafletMap);
+
+          leafletMap.on("locationfound", (e) => {
+            if (userLocationMarker) leafletMap.removeLayer(userLocationMarker);
+            if (userAccuracyCircle) leafletMap.removeLayer(userAccuracyCircle);
+
+            const gpsIcon = L.divIcon({
+              className: "tac-user-gps-icon",
+              html: '<div class="tac-user-gps-diamond"></div>',
+              iconSize: [16, 16],
+              iconAnchor: [8, 8]
+            });
+
+            userAccuracyCircle = L.circle(e.latlng, {
+              radius: e.accuracy / 2,
+              color: "#c8a253",
+              fillColor: "#c8a253",
+              fillOpacity: 0.12,
+              weight: 1
+            }).addTo(leafletMap);
+
+            userLocationMarker = L.marker(e.latlng, { icon: gpsIcon, zIndexOffset: 1000 })
+              .addTo(leafletMap)
+              .bindPopup("<strong>Current Position</strong>");
+
+            leafletMap.setView(e.latlng, Math.max(leafletMap.getZoom(), 17));
+            if (typeof showToast === "function") showToast("GPS Position Locked");
+          });
+
+          leafletMap.on("locationerror", (err) => {
+            if (typeof showToast === "function") {
+              showToast("Locate Failed: " + (err.message || "GPS Unavailable"));
+            }
+          });
         } catch (e) {
-          notice.style.display = "block";
+          if (notice) notice.style.display = "block";
         }
       }
 
       setTimeout(() => {
         if (leafletMap) {
           leafletMap.invalidateSize();
-          updateMapMarkers();
+          updateMapMarkers(true);
         }
       }, 150);
     }
 
-    function updateMapMarkers() {
-      if (!leafletMap || typeof window.L === "undefined") return;
-      leafletMarkers.forEach(m => leafletMap.removeLayer(m));
+    function toggleRouteMap() {
+      toggleMap();
+    }
+
+    function toggleMapStatusFilter(status) {
+      mapVisibleStatuses[status] = !mapVisibleStatuses[status];
+      const chipContainer = document.getElementById("map-status-chips");
+      if (chipContainer) {
+        chipContainer.querySelectorAll(".map-chip").forEach((btn) => {
+          const st = btn.getAttribute("data-status");
+          btn.classList.toggle("active", Boolean(mapVisibleStatuses[st]));
+        });
+      }
+      updateMapMarkers(false);
+    }
+
+    function onMapSellerFilterChange() {
+      const sel = document.getElementById("map-seller-filter");
+      mapSellerFilter = sel ? sel.value : "ALL";
+      updateMapMarkers(false);
+    }
+
+    function locateUserOnMap() {
+      if (!leafletMap || typeof window.L === "undefined") {
+        if (typeof showToast === "function") showToast("Map Offline - GPS Unavailable");
+        return;
+      }
+      if (typeof showToast === "function") showToast("Acquiring GPS Signal...");
+      leafletMap.locate({ setView: false, maxZoom: 18, enableHighAccuracy: true });
+    }
+
+    function houseMatchesMapFilters(h) {
+      const st = h.status || "Unvisited";
+      if (!mapVisibleStatuses[st]) return false;
+
+      const vb = String(h.visitedBy || "").trim();
+      if (mapSellerFilter === "NONE") {
+        if (vb !== "" || st !== "Unvisited") return false;
+      } else if (mapSellerFilter !== "ALL") {
+        if (vb.toLowerCase() !== mapSellerFilter.toLowerCase()) return false;
+      }
+      return true;
+    }
+
+    function updateMapMarkers(shouldFitBounds) {
+      const countEl = document.getElementById("map-pin-count");
+      let visibleCount = 0;
+
+      if (!leafletMap || typeof window.L === "undefined") {
+        houses.forEach((h) => {
+          const lat = parseFloat(h.latitude);
+          const lng = parseFloat(h.longitude);
+          if (!isNaN(lat) && !isNaN(lng) && houseMatchesMapFilters(h)) {
+            visibleCount++;
+          }
+        });
+        if (countEl) countEl.textContent = visibleCount + (visibleCount === 1 ? " Pin" : " Pins");
+        return;
+      }
+
+      leafletMarkers.forEach((m) => leafletMap.removeLayer(m));
       leafletMarkers = [];
 
       const bounds = [];
-      houses.forEach(h => {
+      houses.forEach((h) => {
         const lat = parseFloat(h.latitude);
         const lng = parseFloat(h.longitude);
-        if (!isNaN(lat) && !isNaN(lng)) {
-          const color = h.status === "Sold" ? "#476930"
-                      : h.status === "Interested - Follow Up" ? "#c89632"
-                      : h.status === "Unvisited" ? "#c8a253"
-                      : "#6c757d";
-          const marker = L.circleMarker([lat, lng], {
-            radius: 8,
-            fillColor: color,
-            color: "#111",
-            weight: 2,
-            fillOpacity: 0.9
-          }).addTo(leafletMap);
-          marker.bindPopup(`<strong>${escapeHtml(h.address)}</strong><br/>${escapeHtml(h.status)}`);
-          marker.on("click", () => openDetailModal(h.id));
-          leafletMarkers.push(marker);
-          bounds.push([lat, lng]);
-        }
+        if (isNaN(lat) || isNaN(lng)) return;
+        if (!houseMatchesMapFilters(h)) return;
+
+        visibleCount++;
+        const style = getTacticalPinStyle(h.status);
+        const marker = L.circleMarker([lat, lng], {
+          radius: 8,
+          fillColor: style.fillColor,
+          color: style.color,
+          weight: style.weight,
+          fillOpacity: 0.92
+        }).addTo(leafletMap);
+
+        const visitedByHtml = h.visitedBy
+          ? "<br/><span>Visited by: <strong>" + escapeHtml(h.visitedBy) + "</strong></span>"
+          : "";
+
+        marker.bindPopup(
+          "<strong>" + escapeHtml(h.address) + "</strong><br/>" +
+          escapeHtml(h.status) +
+          visitedByHtml
+        );
+        marker.on("click", () => openDetailModal(h.id));
+        leafletMarkers.push(marker);
+        bounds.push([lat, lng]);
       });
 
-      if (bounds.length > 0) {
+      if (countEl) {
+        countEl.textContent = visibleCount + (visibleCount === 1 ? " Pin" : " Pins");
+      }
+
+      if (shouldFitBounds && bounds.length > 0) {
         leafletMap.fitBounds(bounds, { padding: [20, 20], maxZoom: 17 });
       }
     }
+
 
     /* =========================================================================
        VIEW 2: LIST VIEW (GROUPED BY STREET/SEGMENT + FILTERS)
