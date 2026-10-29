@@ -848,6 +848,12 @@
     body.desktop-mode .bottom-nav { left: 0; right: auto; top: 0; bottom: 0; height: auto; width: 92px; display: flex; flex-direction: column; justify-content: flex-start; padding: 14px 6px; gap: 4px; border-top: none; border-right: 2px solid var(--border-tac); }
     body.desktop-mode .bottom-nav .nav-btn { width: 100%; min-height: 64px; }
     @media print { body.desktop-mode { padding-left: 0 !important; } }
+
+    /* Undo Toast */
+    #undo-toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: 84px; z-index: 400; background-color: #1c1e1f; border: 2px solid var(--accent-brass); color: var(--text-main); border-radius: 999px; padding: 8px 8px 8px 18px; display: none; align-items: center; gap: 14px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6); font-weight: 700; white-space: nowrap; }
+    #undo-toast.show { display: flex; }
+    #undo-toast .undo-btn { background-color: var(--accent-brass); color: #141617; border: none; border-radius: 999px; padding: 8px 18px; font-weight: 900; cursor: pointer; min-height: 40px; text-transform: uppercase; letter-spacing: 0.04em; }
+    body.desktop-mode #undo-toast { bottom: 24px; left: calc(50% + 50px); }
 </style>
 </head>
 <body>
@@ -864,6 +870,7 @@
       <span id="hdr-earn" title="Today's Earnings" style="color: var(--accent-brass);">$0</span>
     </div>
     <button type="button" id="viewModeBtn" class="btn btn-charcoal" onclick="toggleViewMode()">Desktop View</button>
+    <button type="button" id="textSizeBtn" class="btn btn-charcoal" onclick="cycleTextSize()" title="Text size">A</button>
   </header>
 
   <main>
@@ -1300,6 +1307,7 @@
 
   <!-- TOAST FEEDBACK -->
   <div id="toast">Action Logged</div>
+  <div id="undo-toast"><span id="undo-toast-label">Saved</span><button type="button" class="undo-btn" onclick="runUndo()">Undo</button></div>
 
   <!-- BOTTOM TACTICAL NAVIGATION BAR -->
   <nav class="bottom-nav">
@@ -10126,8 +10134,76 @@
       applyViewMode();
     }
 
+    // ---------- Text Size ----------
+    const TEXT_SIZE_KEY = "routeops_text_size_v1";
+    const TEXT_ZOOMS = ["", "1.15", "1.3"];
+    const TEXT_LABELS = ["A", "A+", "A++"];
+    function applyTextSize() {
+      let lvl = 0;
+      try { lvl = parseInt(localStorage.getItem(TEXT_SIZE_KEY) || "0", 10) || 0; } catch (e) {}
+      if (lvl < 0 || lvl > 2) lvl = 0;
+      document.documentElement.style.zoom = TEXT_ZOOMS[lvl];
+      document.documentElement.setAttribute("data-text-size", String(lvl));
+      const btn = document.getElementById("textSizeBtn");
+      if (btn) btn.textContent = TEXT_LABELS[lvl];
+      if (typeof leafletMap !== "undefined" && leafletMap && leafletMap.invalidateSize) {
+        setTimeout(() => { try { leafletMap.invalidateSize(); } catch (e) {} }, 80);
+      }
+    }
+    function cycleTextSize() {
+      let lvl = 0;
+      try { lvl = parseInt(localStorage.getItem(TEXT_SIZE_KEY) || "0", 10) || 0; } catch (e) {}
+      lvl = (lvl + 1) % 3;
+      try { localStorage.setItem(TEXT_SIZE_KEY, String(lvl)); } catch (e) {}
+      applyTextSize();
+    }
+
+    // ---------- Undo ----------
+    let pendingUndoRestore = null;
+    let undoTimer = null;
+    function snapshotHouseAndLogs(houseId) {
+      const idx = houses.findIndex(x => x.id === houseId);
+      return {
+        idx: idx,
+        house: idx >= 0 ? JSON.parse(JSON.stringify(houses[idx])) : null,
+        logs: JSON.parse(JSON.stringify(dailyLogs))
+      };
+    }
+    function restoreHouseAndLogs(snap, houseId) {
+      if (snap.house) {
+        const idx = houses.findIndex(x => x.id === houseId);
+        if (idx >= 0) houses[idx] = snap.house;
+        else houses.splice(Math.min(snap.idx, houses.length), 0, snap.house);
+      }
+      dailyLogs = snap.logs;
+      localStorage.setItem(STORAGE_KEY_LOGS, JSON.stringify(dailyLogs));
+      saveHouses();
+      refreshAllViews();
+    }
+    function offerUndo(label, restoreFn) {
+      pendingUndoRestore = restoreFn;
+      const bar = document.getElementById("undo-toast");
+      const lbl = document.getElementById("undo-toast-label");
+      if (lbl) lbl.textContent = label;
+      if (bar) bar.classList.add("show");
+      clearTimeout(undoTimer);
+      undoTimer = setTimeout(hideUndoToast, 6500);
+    }
+    function hideUndoToast() {
+      pendingUndoRestore = null;
+      clearTimeout(undoTimer);
+      const bar = document.getElementById("undo-toast");
+      if (bar) bar.classList.remove("show");
+    }
+    function runUndo() {
+      const restore = pendingUndoRestore;
+      hideUndoToast();
+      if (restore) { restore(); showToast("Undone"); }
+    }
+
     window.addEventListener("DOMContentLoaded", () => {
       applyViewMode();
+      applyTextSize();
       loadFromStorage();
       populateSectorDropdowns();
       refreshAllViews();
@@ -10552,6 +10628,7 @@
     function logRouteKnock(houseId, newStatus) {
       const h = houses.find(x => x.id === houseId);
       if (!h) return;
+      const snap = snapshotHouseAndLogs(houseId);
 
       const noteInput = document.getElementById("route-quick-note");
       if (noteInput) {
@@ -10574,6 +10651,7 @@
       saveHouses();
       refreshAllViews();
       showToast(`Logged: ${newStatus}`);
+      offerUndo(`Logged: ${newStatus}`, () => restoreHouseAndLogs(snap, houseId));
     }
 
     function skipCurrentRouteHouse(houseId) {
@@ -11139,6 +11217,7 @@
     function saveDetailModal() {
       const h = houses.find(x => x.id === currentDetailHouseId);
       if (!h) return;
+      const snap = snapshotHouseAndLogs(h.id);
 
       const newStatus = document.getElementById("mdl-status-grid").getAttribute("data-selected-status") || h.status;
       const skipFlag  = document.getElementById("mdl-skip-flag-btn").getAttribute("data-flag") === "true";
@@ -11163,17 +11242,21 @@
       closeDetailModal();
       refreshAllViews();
       showToast("House Record Saved");
+      offerUndo("House record saved", () => restoreHouseAndLogs(snap, h.id));
     }
 
     function deleteCurrentHouse() {
       if (!currentDetailHouseId) return;
       if (!confirm("Delete this door from your route list?")) return;
+      const snap = snapshotHouseAndLogs(currentDetailHouseId);
+      const deletedId = currentDetailHouseId;
       houses = houses.filter(x => x.id !== currentDetailHouseId);
       saveHouses();
       populateSectorDropdowns();
       closeDetailModal();
       refreshAllViews();
       showToast("Door Deleted");
+      offerUndo("Door deleted", () => { restoreHouseAndLogs(snap, deletedId); populateSectorDropdowns(); });
     }
 
     function closeDetailModal() {
@@ -11226,6 +11309,12 @@
       closeAddHouseModal();
       refreshAllViews();
       showToast("Door Added to Route");
+      offerUndo("Door added", () => {
+        houses = houses.filter(x => x.id !== newHouse.id);
+        saveHouses();
+        populateSectorDropdowns();
+        refreshAllViews();
+      });
     }
 
     /* =========================================================================
