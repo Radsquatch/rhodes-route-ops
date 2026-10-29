@@ -835,6 +835,13 @@
         background: transparent !important;
       }
     }
+
+    /* Desktop Mode */
+    body.desktop-mode main { max-width: 1440px; }
+    body.desktop-mode .modal-sheet { max-width: 860px; }
+    body.desktop-mode #list-groups-container { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px; align-items: start; }
+    body.desktop-mode #list-groups-container .street-group { margin-bottom: 0; }
+    body.desktop-mode #map-container { height: 520px; }
   </style>
 </head>
 <body>
@@ -850,6 +857,7 @@
       <span id="hdr-sold" title="Today's Sales">S: 0</span>
       <span id="hdr-earn" title="Today's Earnings" style="color: var(--accent-brass);">$0</span>
     </div>
+    <button type="button" id="viewModeBtn" class="btn btn-charcoal" onclick="toggleViewMode()">Desktop View</button>
   </header>
 
   <main>
@@ -10095,7 +10103,25 @@
     /* =========================================================================
        INITIALIZATION & STORAGE
        ========================================================================= */
+    // ---------- View Mode (desktop/mobile) ----------
+    const VIEW_MODE_KEY = "routeops_view_mode_v1";
+    function applyViewMode() {
+      if (!document.body) return;
+      let pref = null;
+      try { pref = localStorage.getItem(VIEW_MODE_KEY); } catch (e) {}
+      const desktop = pref ? pref === "desktop" : window.innerWidth >= 1024;
+      document.body.classList.toggle("desktop-mode", desktop);
+      const btn = document.getElementById("viewModeBtn");
+      if (btn) btn.textContent = desktop ? "Mobile View" : "Desktop View";
+    }
+    function toggleViewMode() {
+      const nowDesktop = !document.body.classList.contains("desktop-mode");
+      try { localStorage.setItem(VIEW_MODE_KEY, nowDesktop ? "desktop" : "mobile"); } catch (e) {}
+      applyViewMode();
+    }
+
     window.addEventListener("DOMContentLoaded", () => {
+      applyViewMode();
       loadFromStorage();
       populateSectorDropdowns();
       refreshAllViews();
