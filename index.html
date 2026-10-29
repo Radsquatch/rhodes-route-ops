@@ -720,6 +720,15 @@
             <button class="btn btn-charcoal" onclick="toggleRouteMap()" title="Toggle Tactical Map">Map</button>
           </div>
         </div>
+        <div style="margin-top: 8px;">
+          <label for="route-seller-select">Knocking As (Visited By)</label>
+          <select id="route-seller-select" onchange="onSellerChange()">
+            <option value="">— Pick who is knocking —</option>
+            <option value="Cham">Cham</option>
+            <option value="Roo">Roo</option>
+            <option value="Zee">Zee</option>
+          </select>
+        </div>
         <div id="map-container"></div>
         <div id="map-offline-notice" style="display:none; font-size:0.75rem; color:var(--text-muted); margin-top:6px;">
           [OFFLINE MODE] Map tiles unavailable. Coordinate bearing & route queue active.
@@ -863,6 +872,14 @@
         </div>
       </div>
 
+      <!-- Visits by Seller -->
+      <div class="tac-panel">
+        <div class="section-title">
+          <span>Doors by Seller</span>
+        </div>
+        <div id="dash-seller-progress"></div>
+      </div>
+
       <!-- Completion Percentage by Street -->
       <div class="tac-panel">
         <div class="section-title">
@@ -883,7 +900,7 @@
             <span>Import Route Data (CSV / JSON)</span>
           </div>
           <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 10px;">
-            Supported fields: <code class="mono" style="color:var(--accent-brass);">address, street, segment, ring, latitude, longitude, status, notes, lastVisit, result</code>
+            Supported fields: <code class="mono" style="color:var(--accent-brass);">address, street, segment, ring, latitude, longitude, status, notes, lastVisit, result, visitedBy</code>
           </p>
           <div style="margin-bottom: 10px;">
             <label for="import-file-input">Select .CSV or .JSON File</label>
@@ -991,6 +1008,17 @@
           <label for="mdl-result">Result / Tag</label>
           <input type="text" id="mdl-result" placeholder="e.g. 1 Card Venmo" />
         </div>
+      </div>
+
+      <!-- Visited By (Seller) -->
+      <div style="margin-bottom: 12px;">
+        <label for="mdl-visited-by">Visited By</label>
+        <select id="mdl-visited-by">
+          <option value="">— Not recorded —</option>
+          <option value="Cham">Cham</option>
+          <option value="Roo">Roo</option>
+          <option value="Zee">Zee</option>
+        </select>
       </div>
 
       <!-- Notes Field -->
@@ -1117,6 +1145,10 @@
     const STORAGE_KEY_HOUSES = "rhodes_ops_starving_student_houses_v1";
     const STORAGE_KEY_LOGS   = "rhodes_ops_starving_student_logs_v1";
     const STORAGE_KEY_ECON   = "rhodes_ops_starving_student_econ_v1";
+    const STORAGE_KEY_SELLER = "rhodes_ops_starving_student_seller_v1";
+
+    // Sellers who work the route — stamped on every visit (Daniel, 2026-10-29)
+    const SELLERS = ["Cham", "Roo", "Zee"];
 
     const HOUSE_STATUSES = [
       "Unvisited",
@@ -1325,6 +1357,7 @@
     let activeRouteSector = "ALL";
     let routeQueueIndex = 0; // Allows cycling through next best unvisited houses
     let currentDetailHouseId = null;
+    let currentSeller = "";
     let collapsedStreets = {};
 
     // Optional Leaflet Map instances
@@ -1346,6 +1379,7 @@
         const rawHouses = localStorage.getItem(STORAGE_KEY_HOUSES);
         if (rawHouses) {
           houses = JSON.parse(rawHouses);
+          houses = houses.map(h => ({ visitedBy: "", ...h }));
         } else {
           houses = JSON.parse(JSON.stringify(FICTIONAL_SAMPLE_HOUSES));
           saveHouses();
@@ -1365,6 +1399,10 @@
           document.getElementById("cfg-card-price").value = econConfig.cardPrice || 30;
           document.getElementById("cfg-card-comm").value = econConfig.cardComm || 15;
         }
+
+        currentSeller = localStorage.getItem(STORAGE_KEY_SELLER) || "";
+        const sellerSel = document.getElementById("route-seller-select");
+        if (sellerSel) sellerSel.value = currentSeller;
       } catch (err) {
         console.error("Storage load error, falling back to demo data:", err);
         houses = JSON.parse(JSON.stringify(FICTIONAL_SAMPLE_HOUSES));
@@ -1390,11 +1428,13 @@
 
     function recordKnockLog(houseId, status) {
       const now = new Date();
+      const logHouse = houses.find(x => x.id === houseId);
       dailyLogs.push({
         ts: now.toISOString(),
         day: getLocalDayString(now),
         houseId,
-        status
+        status,
+        seller: logHouse ? (logHouse.visitedBy || "") : ""
       });
       localStorage.setItem(STORAGE_KEY_LOGS, JSON.stringify(dailyLogs));
     }
@@ -1707,6 +1747,19 @@
       }
     }
 
+    function normalizeSellerName(v) {
+      const s = String(v || "").trim().toLowerCase();
+      const hit = SELLERS.find(x => x.toLowerCase() === s);
+      return hit || "";
+    }
+
+    function onSellerChange() {
+      const sel = document.getElementById("route-seller-select");
+      currentSeller = sel ? sel.value : "";
+      localStorage.setItem(STORAGE_KEY_SELLER, currentSeller);
+      showToast(currentSeller ? `Knocking as ${currentSeller} — visits will be stamped` : "No seller selected");
+    }
+
     function saveQuickRouteNote(houseId, noteVal) {
       const h = houses.find(x => x.id === houseId);
       if (!h) return;
@@ -1727,6 +1780,7 @@
       h.status = newStatus;
       h.lastVisit = new Date().toISOString();
       h.result = newStatus;
+      if (currentSeller) h.visitedBy = currentSeller;
 
       if (newStatus === "Sold" && (!h.saleAmount || h.saleAmount <= 0)) {
         h.saleAmount = econConfig.cardPrice;
@@ -1948,6 +2002,7 @@
                   <div class="house-row-addr">
                     ${escapeHtml(h.address)}
                     ${h.skipLater ? `<span class="flag-badge">Come Back</span>` : ""}
+                    ${h.visitedBy ? `<span class="flag-badge">${escapeHtml(h.visitedBy)}</span>` : ""}
                     ${h.status === "Sold" && h.saleAmount ? `<span class="badge st-sold mono">$${h.saleAmount}</span>` : ""}
                   </div>
                   ${h.notes ? `<div class="house-row-notes">${escapeHtml(h.notes)}</div>` : ""}
@@ -2013,6 +2068,7 @@
 
           <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 10px;">
             <span class="mono">Last Visit: ${formatTimestamp(h.lastVisit)}</span>
+            ${h.visitedBy ? `<span class="flag-badge">By: ${escapeHtml(h.visitedBy)}</span>` : ""}
             ${h.skipLater ? `<span class="flag-badge">Flagged Come Back</span>` : ""}
           </div>
 
@@ -2057,6 +2113,21 @@
       document.getElementById("dash-total-fu").textContent       = fuDue;
       document.getElementById("dash-alltime-rev").textContent    = `$${allTimeGross.toFixed(0)}`;
       document.getElementById("dash-alltime-comm").textContent   = `$${allTimeComm.toFixed(0)}`;
+
+      // Doors by Seller (all-time, from house records)
+      const sellerContainer = document.getElementById("dash-seller-progress");
+      if (sellerContainer) {
+        sellerContainer.innerHTML = SELLERS.map(sName => {
+          const mine = houses.filter(h => h.visitedBy === sName);
+          const doors = mine.filter(h => h.status !== "Unvisited").length;
+          const sld = mine.filter(h => h.status === "Sold").length;
+          return `
+            <div style="display: flex; justify-content: space-between; font-size: 0.88rem; font-weight: 700; margin-bottom: 6px;">
+              <span>${sName}</span>
+              <span class="mono" style="color: var(--accent-brass);">${doors} Doors \u2022 ${sld} Sold</span>
+            </div>`;
+        }).join("");
+      }
 
       // Street Completion Breakdown
       const groups = {};
@@ -2104,6 +2175,7 @@
       document.getElementById("mdl-sale-amount").value      = h.saleAmount || (h.status === "Sold" ? econConfig.cardPrice : "");
       document.getElementById("mdl-result").value           = h.result || "";
       document.getElementById("mdl-notes").value            = h.notes || "";
+      document.getElementById("mdl-visited-by").value       = h.visitedBy || "";
 
       renderModalStatusGrid(h.status);
       updateModalSkipFlagButton(Boolean(h.skipLater));
@@ -2168,6 +2240,7 @@
       h.saleAmount = newStatus === "Sold" ? (saleAmt > 0 ? saleAmt : econConfig.cardPrice) : saleAmt;
       h.result     = resText || newStatus;
       h.notes      = notesText;
+      h.visitedBy  = document.getElementById("mdl-visited-by").value;
       h.lastVisit  = new Date().toISOString();
 
       if (statusChanged || newStatus !== "Unvisited") {
@@ -2292,7 +2365,7 @@
                   <span class="print-check-box"></span>NI
                 </td>
                 <td style="font-size: 0.78rem;">
-                  <strong>[${escapeHtml(h.status)}]</strong> ${escapeHtml(h.notes || "")}
+                  <strong>[${escapeHtml(h.status)}]</strong> ${h.visitedBy ? `By: ${escapeHtml(h.visitedBy)} \u2022 ` : ""}${escapeHtml(h.notes || "")}
                 </td>
               </tr>
             `).join("")}
@@ -2323,6 +2396,7 @@
       const notes     = String(getField(["notes", "note", "comments"]) || "").trim();
       const lastVisit = String(getField(["lastvisit", "last_visit", "visited_at"]) || "").trim();
       const result    = String(getField(["result", "outcome"]) || "").trim();
+      const visitedBy = normalizeSellerName(getField(["visitedby", "visited_by", "visited by", "seller", "who"]));
       const saleRaw   = getField(["saleamount", "sale_amount", "amount", "price"]);
       const skipRaw   = getField(["skiplater", "skip_later", "comeback"]);
 
@@ -2360,6 +2434,7 @@
         notes,
         lastVisit,
         result,
+        visitedBy,
         saleAmount: saleRaw !== undefined && saleRaw !== "" ? parseFloat(saleRaw) : (status === "Sold" ? econConfig.cardPrice : 0),
         skipLater: Boolean(skipRaw === true || skipRaw === "true" || skipRaw === "1")
       };
