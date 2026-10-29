@@ -1284,7 +1284,7 @@
       } catch (e) { console.error(e); setSyncStatus("error", "Sync init failed"); refreshSyncUI(); return; }
       setSyncStatus("connecting", "Connecting…");
       sha256Hex(pass).then(hex => {
-        sync.path = "routes/" + hex;
+        sync.path = "fleets/route-" + hex;
         sync.ref = sync.db.ref(sync.path);
         sync.enabled = true;
         updateSyncIdLabel(hex);
