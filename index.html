@@ -1,0 +1,2542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Rhodes Route Ops — Starving Student</title>
+  <!-- Optional Leaflet CSS (Gracefully degrades offline) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <style>
+    :root {
+      --bg-gunmetal: #181a1b;
+      --bg-charcoal: #222526;
+      --panel-od: #33392e;
+      --panel-od-dark: #252a22;
+      --panel-fde: #524739;
+      --panel-fde-light: #6e604f;
+      --text-main: #eae6df;
+      --text-muted: #a6a096;
+      --accent-brass: #c8a253;
+      --accent-brass-dark: #9c7b38;
+      --border-tac: #444943;
+      
+      /* Tactical Status Colors (Muted, High-Contrast) */
+      --st-unvisited: #4f5459;
+      --st-no-answer: #9e7329;
+      --st-not-interested: #4a3835;
+      --st-follow-up: #c89632;
+      --st-sold: #476930;
+      --st-dnv: #7c2d2d;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-gunmetal);
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-size: 16px;
+      line-height: 1.4;
+      padding-bottom: 84px; /* Space for bottom nav */
+      overflow-x: hidden;
+    }
+
+    .mono {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+
+    /* Header */
+    header {
+      background-color: var(--bg-charcoal);
+      border-bottom: 2px solid var(--accent-brass);
+      padding: 12px 16px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    }
+
+    .brand-title {
+      font-size: 0.95rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent-brass);
+    }
+
+    .brand-sub {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .header-stats {
+      text-align: right;
+      font-size: 0.8rem;
+    }
+
+    .header-stats span {
+      display: inline-block;
+      background: var(--panel-od);
+      border: 1px solid var(--border-tac);
+      padding: 3px 8px;
+      border-radius: 3px;
+      font-weight: 700;
+      color: var(--text-main);
+      margin-left: 4px;
+    }
+
+    /* Main Container */
+    main {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 12px;
+    }
+
+    .view-section {
+      display: none;
+    }
+    .view-section.active {
+      display: block;
+    }
+
+    /* Tactical Cards & Panels */
+    .tac-panel {
+      background-color: var(--bg-charcoal);
+      border: 1px solid var(--border-tac);
+      border-left: 4px solid var(--accent-brass);
+      border-radius: 4px;
+      padding: 14px;
+      margin-bottom: 14px;
+    }
+
+    .tac-panel-od {
+      background-color: var(--panel-od-dark);
+      border: 1px solid var(--panel-od);
+      border-left: 4px solid var(--accent-brass);
+      border-radius: 4px;
+      padding: 14px;
+      margin-bottom: 14px;
+    }
+
+    .tac-panel-fde {
+      background-color: var(--panel-fde);
+      border: 1px solid var(--panel-fde-light);
+      border-radius: 4px;
+      padding: 14px;
+      margin-bottom: 14px;
+    }
+
+    .section-title {
+      font-size: 0.82rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--accent-brass);
+      margin-bottom: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border-tac);
+      padding-bottom: 6px;
+    }
+
+    /* Big Tactical Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 48px;
+      padding: 10px 16px;
+      font-size: 0.9rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-main);
+      background-color: var(--panel-od);
+      border: 1px solid var(--border-tac);
+      border-radius: 4px;
+      cursor: pointer;
+      text-align: center;
+      user-select: none;
+      transition: transform 0.05s, background-color 0.15s;
+    }
+
+    .btn:active {
+      transform: scale(0.98);
+    }
+
+    .btn-brass {
+      background-color: var(--accent-brass);
+      color: #121314;
+      border-color: #dfbc6c;
+    }
+
+    .btn-fde {
+      background-color: var(--panel-fde);
+      border-color: var(--panel-fde-light);
+    }
+
+    .btn-charcoal {
+      background-color: var(--bg-charcoal);
+      border-color: var(--border-tac);
+    }
+
+    .btn-danger {
+      background-color: var(--st-dnv);
+      border-color: #a13d3d;
+    }
+
+    .btn-block {
+      width: 100%;
+    }
+
+    /* Status Badges & Action Buttons */
+    .badge {
+      display: inline-block;
+      padding: 4px 8px;
+      font-size: 0.72rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-radius: 3px;
+      color: #fff;
+    }
+    .st-unvisited { background-color: var(--st-unvisited); }
+    .st-no-answer { background-color: var(--st-no-answer); }
+    .st-not-interested { background-color: var(--st-not-interested); color: #ccc; }
+    .st-follow-up { background-color: var(--st-follow-up); color: #111; }
+    .st-sold { background-color: var(--st-sold); }
+    .st-dnv { background-color: var(--st-dnv); }
+
+    .flag-badge {
+      background-color: #3e4447;
+      border: 1px solid var(--accent-brass);
+      color: var(--accent-brass);
+      padding: 2px 6px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      border-radius: 3px;
+      text-transform: uppercase;
+    }
+
+    /* Forms & Inputs */
+    input[type="text"],
+    input[type="number"],
+    input[type="search"],
+    select,
+    textarea {
+      width: 100%;
+      min-height: 46px;
+      background-color: #141617;
+      border: 1px solid var(--border-tac);
+      border-radius: 4px;
+      color: var(--text-main);
+      padding: 10px 12px;
+      font-size: 1rem;
+      font-family: inherit;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: var(--accent-brass);
+    }
+
+    label {
+      display: block;
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    /* Route Mode Specifics */
+    .target-card {
+      background-color: var(--bg-charcoal);
+      border: 2px solid var(--accent-brass);
+      border-radius: 6px;
+      padding: 16px;
+      margin-bottom: 14px;
+    }
+
+    .target-address {
+      font-size: 1.55rem;
+      font-weight: 900;
+      line-height: 1.15;
+      color: var(--text-main);
+      margin: 6px 0;
+    }
+
+    .target-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 12px;
+      font-size: 0.82rem;
+      color: var(--text-muted);
+    }
+
+    .target-meta span {
+      background: #161819;
+      padding: 3px 8px;
+      border-radius: 3px;
+      border: 1px solid #303436;
+    }
+
+    .knock-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .knock-btn {
+      min-height: 64px;
+      font-size: 0.92rem;
+      font-weight: 800;
+      border-width: 2px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 8px;
+      line-height: 1.2;
+    }
+
+    .knock-btn small {
+      font-size: 0.68rem;
+      font-weight: 600;
+      opacity: 0.85;
+      margin-top: 2px;
+    }
+
+    .knock-btn.kb-sold { background-color: var(--st-sold); border-color: #639144; }
+    .knock-btn.kb-followup { background-color: var(--st-follow-up); color: #121314; border-color: #e5b34e; }
+    .knock-btn.kb-noans { background-color: var(--st-no-answer); border-color: #c4923b; }
+    .knock-btn.kb-notint { background-color: var(--st-not-interested); border-color: #69514d; }
+    .knock-btn.kb-dnv { background-color: var(--st-dnv); border-color: #a63f3f; }
+    .knock-btn.kb-skip { background-color: var(--panel-fde); border-color: var(--accent-brass); }
+
+    /* House List Items */
+    .street-group {
+      margin-bottom: 16px;
+      border: 1px solid var(--border-tac);
+      border-radius: 4px;
+      overflow: hidden;
+      background-color: var(--bg-charcoal);
+    }
+
+    .street-header {
+      background-color: var(--panel-od);
+      padding: 12px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      border-bottom: 1px solid var(--border-tac);
+    }
+
+    .street-header-title {
+      font-weight: 800;
+      font-size: 0.95rem;
+      color: var(--text-main);
+    }
+
+    .street-header-sub {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .house-row {
+      padding: 14px;
+      border-bottom: 1px solid #2d3133;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+    }
+
+    .house-row:last-child {
+      border-bottom: none;
+    }
+
+    .house-row:active {
+      background-color: #2c3032;
+    }
+
+    .house-row-main {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .house-row-addr {
+      font-weight: 700;
+      font-size: 1rem;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .house-row-notes {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      margin-top: 3px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .house-row-meta {
+      font-size: 0.72rem;
+      color: #827d75;
+      margin-top: 2px;
+    }
+
+    /* Filter Chips */
+    .chip-bar {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      padding-bottom: 8px;
+      margin-bottom: 10px;
+      scrollbar-width: none;
+    }
+    .chip-bar::-webkit-scrollbar { display: none; }
+
+    .chip {
+      white-space: nowrap;
+      padding: 8px 12px;
+      min-height: 38px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      background-color: var(--bg-charcoal);
+      border: 1px solid var(--border-tac);
+      border-radius: 4px;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+
+    .chip.active {
+      background-color: var(--accent-brass);
+      color: #121314;
+      border-color: var(--accent-brass);
+    }
+
+    /* Dashboard Metrics Grid */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .metric-box {
+      background-color: var(--bg-charcoal);
+      border: 1px solid var(--border-tac);
+      border-top: 3px solid var(--accent-brass);
+      border-radius: 4px;
+      padding: 12px;
+    }
+
+    .metric-val {
+      font-size: 1.6rem;
+      font-weight: 900;
+      color: var(--text-main);
+      line-height: 1.1;
+    }
+
+    .metric-label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .progress-bar-wrap {
+      width: 100%;
+      height: 10px;
+      background-color: #141617;
+      border-radius: 3px;
+      overflow: hidden;
+      margin-top: 6px;
+      border: 1px solid #323638;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      background-color: var(--accent-brass);
+      transition: width 0.25s ease;
+    }
+
+    /* Bottom Navigation (One-Handed Thumb Zone) */
+    .bottom-nav {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 68px;
+      background-color: #141617;
+      border-top: 2px solid var(--border-tac);
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      z-index: 200;
+      box-shadow: 0 -4px 14px rgba(0, 0, 0, 0.6);
+    }
+
+    .nav-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.68rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+      position: relative;
+      padding: 6px 2px;
+    }
+
+    .nav-btn svg {
+      width: 22px;
+      height: 22px;
+      margin-bottom: 4px;
+      fill: currentColor;
+    }
+
+    .nav-btn.active {
+      color: var(--accent-brass);
+      background-color: rgba(200, 162, 83, 0.08);
+      border-top: 3px solid var(--accent-brass);
+    }
+
+    .nav-badge {
+      position: absolute;
+      top: 6px;
+      right: 16%;
+      background-color: var(--st-follow-up);
+      color: #111;
+      font-size: 0.65rem;
+      font-weight: 900;
+      padding: 1px 5px;
+      border-radius: 8px;
+    }
+
+    /* Slide-Up House Detail Modal */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background-color: rgba(0, 0, 0, 0.78);
+      z-index: 300;
+      display: none;
+      align-items: flex-end;
+      justify-content: center;
+    }
+
+    .modal-backdrop.open {
+      display: flex;
+    }
+
+    .modal-sheet {
+      background-color: var(--bg-charcoal);
+      border-top: 3px solid var(--accent-brass);
+      width: 100%;
+      max-width: 720px;
+      max-height: 92vh;
+      overflow-y: auto;
+      padding: 16px;
+      border-radius: 8px 8px 0 0;
+      box-shadow: 0 -8px 25px rgba(0, 0, 0, 0.8);
+    }
+
+    .status-select-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .st-opt-btn {
+      min-height: 50px;
+      padding: 8px;
+      font-size: 0.8rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      border: 2px solid var(--border-tac);
+      background-color: #181a1b;
+      color: var(--text-main);
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .st-opt-btn.selected {
+      border-color: var(--accent-brass);
+      box-shadow: 0 0 0 2px rgba(200, 162, 83, 0.35);
+    }
+
+    /* Map Container */
+    #map-container {
+      height: 240px;
+      width: 100%;
+      background-color: #141617;
+      border: 1px solid var(--border-tac);
+      border-radius: 4px;
+      margin-top: 10px;
+      display: none;
+    }
+
+    /* Toast Notification */
+    #toast {
+      position: fixed;
+      bottom: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: var(--panel-od);
+      border: 2px solid var(--accent-brass);
+      color: var(--text-main);
+      padding: 10px 18px;
+      border-radius: 4px;
+      font-weight: 800;
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      z-index: 400;
+      box-shadow: 0 6px 16px rgba(0,0,0,0.7);
+      display: none;
+      white-space: nowrap;
+    }
+
+    /* Print Checklist Specifics */
+    .print-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      font-size: 0.85rem;
+    }
+
+    .print-table th, .print-table td {
+      border: 1px solid var(--border-tac);
+      padding: 8px;
+      text-align: left;
+    }
+
+    .print-table th {
+      background-color: var(--panel-od);
+      color: var(--accent-brass);
+      text-transform: uppercase;
+      font-size: 0.75rem;
+    }
+
+    .print-check-box {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 1.5px solid currentColor;
+      vertical-align: middle;
+      margin-right: 4px;
+    }
+
+    @media print {
+      body {
+        background: #ffffff !important;
+        color: #000000 !important;
+        padding-bottom: 0 !important;
+      }
+      header, .bottom-nav, .no-print, #toast, .modal-backdrop {
+        display: none !important;
+      }
+      main {
+        max-width: 100% !important;
+        padding: 0 !important;
+      }
+      .view-section {
+        display: none !important;
+      }
+      #view-ops {
+        display: block !important;
+      }
+      .ops-non-print {
+        display: none !important;
+      }
+      .print-sheet-wrapper {
+        border: none !important;
+        background: #fff !important;
+        padding: 0 !important;
+      }
+      .print-table th, .print-table td {
+        border: 1px solid #000 !important;
+        color: #000 !important;
+        background: transparent !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- TOP TACTICAL HEADER -->
+  <header>
+    <div>
+      <div class="brand-title">Rhodes Route Ops</div>
+      <div class="brand-sub">Starving Student // Provo Sector</div>
+    </div>
+    <div class="header-stats mono">
+      <span id="hdr-knocks" title="Today's Knocks">K: 0</span>
+      <span id="hdr-sold" title="Today's Sales">S: 0</span>
+      <span id="hdr-earn" title="Today's Earnings" style="color: var(--accent-brass);">$0</span>
+    </div>
+  </header>
+
+  <main>
+    <!-- ==========================================
+         VIEW 1: ROUTE MODE (NEXT HOUSE FLOW)
+         ========================================== -->
+    <section id="view-route" class="view-section active">
+      <div class="tac-panel-od" style="padding: 10px 14px;">
+        <div style="display: flex; gap: 8px; align-items: center; justify-content: space-between;">
+          <div style="flex: 1;">
+            <label for="route-segment-select">Active Sector / Street</label>
+            <select id="route-segment-select" onchange="onRouteSectorChange()"></select>
+          </div>
+          <div style="padding-top: 18px;">
+            <button class="btn btn-charcoal" onclick="toggleRouteMap()" title="Toggle Tactical Map">Map</button>
+          </div>
+        </div>
+        <div id="map-container"></div>
+        <div id="map-offline-notice" style="display:none; font-size:0.75rem; color:var(--text-muted); margin-top:6px;">
+          [OFFLINE MODE] Map tiles unavailable. Coordinate bearing & route queue active.
+        </div>
+      </div>
+
+      <!-- Current Next-Best House Card -->
+      <div id="route-target-container"></div>
+
+      <!-- Up Next Queue (Next 4 Houses) -->
+      <div class="tac-panel">
+        <div class="section-title">
+          <span>Up Next in Queue</span>
+          <span id="route-remaining-count" class="mono">0 Left</span>
+        </div>
+        <div id="route-upcoming-list"></div>
+      </div>
+    </section>
+
+    <!-- ==========================================
+         VIEW 2: LIST VIEW (GROUPED BY STREET/SEGMENT)
+         ========================================== -->
+    <section id="view-list" class="view-section">
+      <div class="tac-panel" style="padding: 12px;">
+        <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+          <input type="search" id="list-search" placeholder="Search address, street, or notes..." oninput="renderListView()" />
+          <button class="btn btn-brass" onclick="openAddHouseModal()" style="white-space: nowrap;">+ Door</button>
+        </div>
+
+        <!-- Status & Mode Filter Chips -->
+        <div class="chip-bar" id="list-filter-chips">
+          <button class="chip active" data-filter="ALL" onclick="setListFilter('ALL')">All</button>
+          <button class="chip" data-filter="Unvisited" onclick="setListFilter('Unvisited')">Unvisited</button>
+          <button class="chip" data-filter="Interested - Follow Up" onclick="setListFilter('Interested - Follow Up')">Follow-Ups</button>
+          <button class="chip" data-filter="Knocked - No Answer" onclick="setListFilter('Knocked - No Answer')">No Answer</button>
+          <button class="chip" data-filter="Sold" onclick="setListFilter('Sold')">Sold</button>
+          <button class="chip" data-filter="SKIP_LATER" onclick="setListFilter('SKIP_LATER')">Come Back</button>
+          <button class="chip" data-filter="INCOMPLETE_STREETS" onclick="setListFilter('INCOMPLETE_STREETS')">Incomplete Streets</button>
+          <button class="chip" data-filter="COMPLETE_STREETS" onclick="setListFilter('COMPLETE_STREETS')">100% Streets</button>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.78rem; color: var(--text-muted);">
+          <span id="list-showing-count">Showing 0 houses</span>
+          <button class="btn btn-charcoal" style="min-height: 32px; padding: 4px 10px; font-size: 0.72rem;" onclick="toggleAllStreetGroups()">Expand/Collapse All</button>
+        </div>
+      </div>
+
+      <div id="list-groups-container"></div>
+    </section>
+
+    <!-- ==========================================
+         VIEW 3: FOLLOW-UP QUEUE
+         ========================================== -->
+    <section id="view-followup" class="view-section">
+      <div class="tac-panel-fde">
+        <div class="section-title" style="color: var(--text-main); border-color: rgba(255,255,255,0.2);">
+          <span>Priority Follow-Up Queue</span>
+          <span id="fu-total-badge" class="badge st-follow-up">0 Due</span>
+        </div>
+        <p style="font-size: 0.82rem; color: var(--text-main);">
+          Houses marked <strong>Interested - Follow Up</strong> or flagged <strong>Come Back Later</strong> automatically rise to the top with notes and last-visit time.
+        </p>
+      </div>
+
+      <div id="followup-list-container"></div>
+    </section>
+
+    <!-- ==========================================
+         VIEW 4: DASHBOARD & EARNINGS TRACKER
+         ========================================== -->
+    <section id="view-dash" class="view-section">
+      <div class="section-title">
+        <span>Daily Sitrep & Earnings</span>
+        <span id="dash-date-label" class="mono">TODAY</span>
+      </div>
+
+      <div class="metrics-grid">
+        <div class="metric-box">
+          <div class="metric-val mono" id="dash-today-knocks">0</div>
+          <div class="metric-label">Daily Knock Count</div>
+        </div>
+        <div class="metric-box">
+          <div class="metric-val mono" id="dash-today-sales" style="color: #7ab854;">0</div>
+          <div class="metric-label">Daily Sales</div>
+        </div>
+        <div class="metric-box">
+          <div class="metric-val mono" id="dash-today-rev" style="color: var(--accent-brass);">$0</div>
+          <div class="metric-label">Daily Gross ($ Sold)</div>
+        </div>
+        <div class="metric-box">
+          <div class="metric-val mono" id="dash-today-comm" style="color: var(--accent-brass);">$0</div>
+          <div class="metric-label">Daily Commission</div>
+        </div>
+      </div>
+
+      <!-- Overall Route Telemetry -->
+      <div class="tac-panel">
+        <div class="section-title">
+          <span>Route Telemetry (All Time)</span>
+          <span id="dash-overall-pct" class="mono">0% Complete</span>
+        </div>
+        <div class="metrics-grid" style="margin-bottom: 8px;">
+          <div class="metric-box" style="border-top-color: var(--st-unvisited);">
+            <div class="metric-val mono" id="dash-total-houses">0</div>
+            <div class="metric-label">Total Houses</div>
+          </div>
+          <div class="metric-box" style="border-top-color: var(--st-no-answer);">
+            <div class="metric-val mono" id="dash-visited-houses">0</div>
+            <div class="metric-label">Visited Doors</div>
+          </div>
+          <div class="metric-box" style="border-top-color: var(--st-sold);">
+            <div class="metric-val mono" id="dash-total-sold">0</div>
+            <div class="metric-label">Total Cards Sold</div>
+          </div>
+          <div class="metric-box" style="border-top-color: var(--st-follow-up);">
+            <div class="metric-val mono" id="dash-total-fu">0</div>
+            <div class="metric-label">Follow-Ups Due</div>
+          </div>
+        </div>
+
+        <div style="font-size: 0.82rem; display: flex; justify-content: space-between; color: var(--text-muted); margin-top: 8px;">
+          <span>Total Route Gross: <strong id="dash-alltime-rev" class="mono" style="color:var(--text-main);">$0</strong></span>
+          <span>Total My Earnings: <strong id="dash-alltime-comm" class="mono" style="color:var(--accent-brass);">$0</strong></span>
+        </div>
+      </div>
+
+      <!-- Earnings Config -->
+      <div class="tac-panel-od">
+        <div class="section-title">
+          <span>Starving Student Card Economics</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div>
+            <label for="cfg-card-price">Default Sale Price ($)</label>
+            <input type="number" id="cfg-card-price" min="1" step="1" value="30" onchange="saveEconConfig()" />
+          </div>
+          <div>
+            <label for="cfg-card-comm">My Profit / Card ($)</label>
+            <input type="number" id="cfg-card-comm" min="1" step="0.5" value="15" onchange="saveEconConfig()" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Completion Percentage by Street -->
+      <div class="tac-panel">
+        <div class="section-title">
+          <span>Completion by Street / Segment</span>
+        </div>
+        <div id="dash-street-progress"></div>
+      </div>
+    </section>
+
+    <!-- ==========================================
+         VIEW 5: DATA OPS, IMPORT/EXPORT & PRINT
+         ========================================== -->
+    <section id="view-ops" class="view-section">
+      <div class="ops-non-print">
+        <!-- Import Houses CSV or JSON -->
+        <div class="tac-panel">
+          <div class="section-title">
+            <span>Import Route Data (CSV / JSON)</span>
+          </div>
+          <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 10px;">
+            Supported fields: <code class="mono" style="color:var(--accent-brass);">address, street, segment, ring, latitude, longitude, status, notes, lastVisit, result</code>
+          </p>
+          <div style="margin-bottom: 10px;">
+            <label for="import-file-input">Select .CSV or .JSON File</label>
+            <input type="file" id="import-file-input" accept=".csv,.json,text/csv,application/json" style="padding: 8px;" />
+          </div>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button class="btn btn-brass" style="flex:1;" onclick="handleFileImport('merge')">Import &amp; Merge</button>
+            <button class="btn btn-fde" style="flex:1;" onclick="handleFileImport('replace')">Import &amp; Replace All</button>
+          </div>
+
+          <details style="margin-top: 12px;">
+            <summary style="font-size: 0.78rem; font-weight: 700; color: var(--accent-brass); cursor: pointer;">+ Paste Raw CSV or JSON Text</summary>
+            <div style="margin-top: 8px;">
+              <textarea id="import-raw-text" rows="4" placeholder='Paste CSV rows or JSON array here...' class="mono" style="font-size: 0.8rem;"></textarea>
+              <div style="display: flex; gap: 8px; margin-top: 8px;">
+                <button class="btn btn-od" style="flex:1;" onclick="handleRawTextImport('merge')">Merge Pasted Data</button>
+                <button class="btn btn-charcoal" style="flex:1;" onclick="handleRawTextImport('replace')">Replace With Pasted</button>
+              </div>
+            </div>
+          </details>
+        </div>
+
+        <!-- LocalStorage Backup & Reset -->
+        <div class="tac-panel-od">
+          <div class="section-title">
+            <span>Local-First Storage Backup</span>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+            <button class="btn btn-brass" onclick="exportRouteJSON()">Export JSON</button>
+            <button class="btn btn-fde" onclick="triggerQuickJSONImport()">Import JSON</button>
+          </div>
+          <button class="btn btn-danger btn-block" onclick="resetDemoData()">Reset Demo Data (12 Fictional Houses)</button>
+        </div>
+
+        <!-- Future Firebase Sync Stub UI -->
+        <div class="tac-panel" style="border-left-color: #6c757d;">
+          <div class="section-title">
+            <span>Cloud Sync Module (Stub)</span>
+            <span class="badge st-unvisited">LOCAL ONLY</span>
+          </div>
+          <p style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 8px;">
+            Passphrase-based Firebase sync stub is pre-wired in code (<code class="mono">SYNC_CONFIG</code>). No network credentials active.
+          </p>
+          <div style="display: flex; gap: 8px;">
+            <input type="text" id="sync-passphrase-stub" placeholder="Squad Passphrase (e.g. PROVO-ALPHA-7)" disabled />
+            <button class="btn btn-charcoal" onclick="testSyncStub()">Status</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Print Door Checklist for One Street/Segment -->
+      <div class="tac-panel print-sheet-wrapper">
+        <div class="section-title no-print">
+          <span>Print Door Checklist (1 Street / Segment)</span>
+        </div>
+        <div class="no-print" style="display: flex; gap: 8px; margin-bottom: 12px; align-items: flex-end;">
+          <div style="flex: 1;">
+            <label for="print-segment-select">Select Street / Segment</label>
+            <select id="print-segment-select" onchange="renderPrintChecklist()"></select>
+          </div>
+          <button class="btn btn-brass" onclick="window.print()">Print Sheet</button>
+        </div>
+
+        <div id="print-checklist-area"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ==========================================
+       DETAIL PANEL MODAL (SLIDE-UP PER HOUSE)
+       ========================================== -->
+  <div id="detail-modal" class="modal-backdrop" onclick="handleBackdropClick(event)">
+    <div class="modal-sheet">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 10px;">
+        <div>
+          <div id="mdl-street-seg" style="font-size: 0.75rem; font-weight: 800; color: var(--accent-brass); text-transform: uppercase;"></div>
+          <h2 id="mdl-address" style="font-size: 1.35rem; font-weight: 900; line-height: 1.2;"></h2>
+        </div>
+        <button class="btn btn-charcoal" style="min-height: 38px; padding: 6px 12px;" onclick="closeDetailModal()">Close</button>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.76rem; color: var(--text-muted); margin-bottom: 12px; background: #161819; padding: 6px 10px; border-radius: 4px;">
+        <span>Last Visit: <strong id="mdl-last-visit" class="mono" style="color: var(--text-main);">Never</strong></span>
+        <span>Ring: <strong id="mdl-ring" class="mono" style="color: var(--text-main);">N/A</strong></span>
+      </div>
+
+      <!-- 6 Status Buttons -->
+      <label>Set Door Status</label>
+      <div class="status-select-grid" id="mdl-status-grid"></div>
+
+      <!-- Skip / Come Back Later Flag -->
+      <div style="margin-bottom: 12px;">
+        <button id="mdl-skip-flag-btn" class="btn btn-block" onclick="toggleModalSkipFlag()">
+          Flag: Skip / Come Back Later (OFF)
+        </button>
+      </div>
+
+      <!-- Sale Amount & Result (Shown or Editable) -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+        <div>
+          <label for="mdl-sale-amount">Sale Amount ($)</label>
+          <input type="number" id="mdl-sale-amount" min="0" step="1" placeholder="30" />
+        </div>
+        <div>
+          <label for="mdl-result">Result / Tag</label>
+          <input type="text" id="mdl-result" placeholder="e.g. 1 Card Venmo" />
+        </div>
+      </div>
+
+      <!-- Notes Field -->
+      <div style="margin-bottom: 14px;">
+        <label for="mdl-notes">Field Notes (Gate code, dog, callback time)</label>
+        <textarea id="mdl-notes" rows="3" placeholder="Enter tactical notes for this door..."></textarea>
+      </div>
+
+      <div style="display: flex; gap: 10px;">
+        <button class="btn btn-brass" style="flex: 2;" onclick="saveDetailModal()">Save &amp; Log Timestamp</button>
+        <button class="btn btn-danger" style="flex: 1;" onclick="deleteCurrentHouse()">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       ADD NEW HOUSE MODAL
+       ========================================== -->
+  <div id="add-modal" class="modal-backdrop" onclick="if(event.target.id==='add-modal') closeAddHouseModal()">
+    <div class="modal-sheet">
+      <div class="section-title">
+        <span>Add New Door to Route</span>
+        <button class="btn btn-charcoal" style="min-height: 32px; padding: 4px 10px;" onclick="closeAddHouseModal()">X</button>
+      </div>
+      <div style="display: grid; gap: 10px;">
+        <div>
+          <label>Street Address *</label>
+          <input type="text" id="add-address" placeholder="e.g. 742 N 400 E (Sample)" />
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div>
+            <label>Street Name *</label>
+            <input type="text" id="add-street" placeholder="e.g. N 400 E" />
+          </div>
+          <div>
+            <label>Segment / Block</label>
+            <input type="text" id="add-segment" placeholder="e.g. 700 N Block" />
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
+          <div>
+            <label>Ring</label>
+            <input type="text" id="add-ring" placeholder="Ring 1" />
+          </div>
+          <div>
+            <label>Latitude</label>
+            <input type="number" step="any" id="add-lat" placeholder="40.2440" />
+          </div>
+          <div>
+            <label>Longitude</label>
+            <input type="number" step="any" id="add-lng" placeholder="-111.6510" />
+          </div>
+        </div>
+        <div>
+          <label>Initial Notes</label>
+          <input type="text" id="add-notes" placeholder="Optional notes..." />
+        </div>
+        <button class="btn btn-brass btn-block" onclick="saveNewHouse()">Add Door to Roster</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST FEEDBACK -->
+  <div id="toast">Action Logged</div>
+
+  <!-- BOTTOM TACTICAL NAVIGATION BAR -->
+  <nav class="bottom-nav">
+    <button class="nav-btn active" data-tab="route" onclick="switchTab('route')">
+      <svg viewBox="0 0 24 24"><path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z"/></svg>
+      <span>Route</span>
+    </button>
+    <button class="nav-btn" data-tab="list" onclick="switchTab('list')">
+      <svg viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>
+      <span>Streets</span>
+    </button>
+    <button class="nav-btn" data-tab="followup" onclick="switchTab('followup')">
+      <svg viewBox="0 0 24 24"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>
+      <span>Follow-Up</span>
+      <span id="nav-fu-badge" class="nav-badge" style="display:none;">0</span>
+    </button>
+    <button class="nav-btn" data-tab="dash" onclick="switchTab('dash')">
+      <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/></svg>
+      <span>Sitrep</span>
+    </button>
+    <button class="nav-btn" data-tab="ops" onclick="switchTab('ops')">
+      <svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+      <span>Ops/Print</span>
+    </button>
+  </nav>
+
+  <!-- Optional Leaflet JS (Gracefully degrades if offline) -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+  <script>
+    /* =========================================================================
+       11. CLEARLY MARKED SYNC_CONFIG STUB (FUTURE PASSPHRASE FIREBASE MODULE)
+       =========================================================================
+       NOTE: Do not include real secrets or credentials here.
+       When ready to deploy cloud squad sync, populate firebaseConfig and
+       implement deriveCollectionFromPassphrase(passphrase) using SHA-256.
+    ========================================================================= */
+    const SYNC_CONFIG = {
+      enabled: false,
+      provider: "firebase-firestore-stub",
+      passphraseSalt: "RHODES-ROUTE-OPS-PROVO-V1",
+      syncIntervalMs: 30000,
+      firebaseConfig: {
+        apiKey: null,            // STUB: Leave null in offline/local build
+        authDomain: null,        // STUB
+        projectId: null,         // STUB
+        storageBucket: null,     // STUB
+        messagingSenderId: null, // STUB
+        appId: null              // STUB
+      },
+      async pushLocalStateStub(passphrase, payload) {
+        console.info("[SYNC_CONFIG STUB] Cloud sync disabled. Data remains safely in localStorage.", { passphrase, count: payload.length });
+        return { ok: false, reason: "STUB_ONLY_NO_CREDENTIALS" };
+      }
+    };
+
+    /* =========================================================================
+       CONSTANTS & HOUSE STATUS DEFINITIONS
+       ========================================================================= */
+    const STORAGE_KEY_HOUSES = "rhodes_ops_starving_student_houses_v1";
+    const STORAGE_KEY_LOGS   = "rhodes_ops_starving_student_logs_v1";
+    const STORAGE_KEY_ECON   = "rhodes_ops_starving_student_econ_v1";
+
+    const HOUSE_STATUSES = [
+      "Unvisited",
+      "Knocked - No Answer",
+      "Not Interested",
+      "Interested - Follow Up",
+      "Sold",
+      "Do Not Visit"
+    ];
+
+    /* =========================================================================
+       12 FICTIONAL SAMPLE HOUSES (PROVO SECTOR DEMO DATA)
+       ========================================================================= */
+    const FICTIONAL_SAMPLE_HOUSES = [
+      {
+        id: "demo-101",
+        address: "102 E Mock Cougar Ln (Fictional Sample)",
+        street: "E Mock Cougar Ln",
+        segment: "100 E Block (North)",
+        ring: "Ring 1 - Campus North",
+        latitude: 40.2518,
+        longitude: -111.6562,
+        status: "Unvisited",
+        notes: "Fictional sample house #1. Side porch entrance near carport.",
+        lastVisit: "",
+        result: "",
+        saleAmount: 0,
+        skipLater: false
+      },
+      {
+        id: "demo-102",
+        address: "106 E Mock Cougar Ln (Fictional Sample)",
+        street: "E Mock Cougar Ln",
+        segment: "100 E Block (North)",
+        ring: "Ring 1 - Campus North",
+        latitude: 40.2519,
+        longitude: -111.6558,
+        status: "Unvisited",
+        notes: "Fictional sample house #2. Two bikes on porch.",
+        lastVisit: "",
+        result: "",
+        saleAmount: 0,
+        skipLater: false
+      },
+      {
+        id: "demo-103",
+        address: "110 E Mock Cougar Ln (Fictional Sample)",
+        street: "E Mock Cougar Ln",
+        segment: "100 E Block (North)",
+        ring: "Ring 1 - Campus North",
+        latitude: 40.2520,
+        longitude: -111.6554,
+        status: "Interested - Follow Up",
+        notes: "Fictional sample: Roommates want 2 cards, asked to come back after 5:30 PM with Venmo.",
+        lastVisit: new Date(Date.now() - 3600 * 1000 * 3).toISOString(),
+        result: "Callback @ 5:30pm",
+        saleAmount: 0,
+        skipLater: true
+      },
+      {
+        id: "demo-104",
+        address: "114 E Mock Cougar Ln (Fictional Sample)",
+        street: "E Mock Cougar Ln",
+        segment: "100 E Block (North)",
+        ring: "Ring 1 - Campus North",
+        latitude: 40.2521,
+        longitude: -111.6550,
+        status: "Sold",
+        notes: "Fictional sample: Bought 1 Starving Student card via cash. Loves local pizza deals.",
+        lastVisit: new Date(Date.now() - 3600 * 1000 * 2).toISOString(),
+        result: "1 Card Paid Cash",
+        saleAmount: 30,
+        skipLater: false
+      },
+      {
+        id: "demo-201",
+        address: "415 N Fictional Foothill Dr (Sample)",
+        street: "N Fictional Foothill Dr",
+        segment: "400 N Block (East)",
+        ring: "Ring 1 - Campus North",
+        latitude: 40.2485,
+        longitude: -111.6490,
+        status: "Unvisited",
+        notes: "Fictional sample house #5. Well-lit front steps.",
+        lastVisit: "",
+        result: "",
+        saleAmount: 0,
+        skipLater: false
+      },
+      {
+        id: "demo-202",
+        address: "421 N Fictional Foothill Dr (Sample)",
+        street: "N Fictional Foothill Dr",
+        segment: "400 N Block (East)",
+        ring: "Ring 1 - Campus North",
+        latitude: 40.2488,
+        longitude: -111.6489,
+        status: "Knocked - No Answer",
+        notes: "Fictional sample: TV was on inside, no answer at 2 PM. Try evening pass.",
+        lastVisit: new Date(Date.now() - 3600 * 1000 * 4).toISOString(),
+        result: "No Answer",
+        saleAmount: 0,
+        skipLater: true
+      },
+      {
+        id: "demo-203",
+        address: "429 N Fictional Foothill Dr (Sample)",
+        street: "N Fictional Foothill Dr",
+        segment: "400 N Block (East)",
+        ring: "Ring 1 - Campus North",
+        latitude: 40.2491,
+        longitude: -111.6488,
+        status: "Unvisited",
+        notes: "Fictional sample house #7. Ring doorbell.",
+        lastVisit: "",
+        result: "",
+        saleAmount: 0,
+        skipLater: false
+      },
+      {
+        id: "demo-204",
+        address: "435 N Fictional Foothill Dr (Sample)",
+        street: "N Fictional Foothill Dr",
+        segment: "400 N Block (East)",
+        ring: "Ring 1 - Campus North",
+        latitude: 40.2494,
+        longitude: -111.6487,
+        status: "Not Interested",
+        notes: "Fictional sample: Already bought a card from a nephew last week.",
+        lastVisit: new Date(Date.now() - 3600 * 1000 * 5).toISOString(),
+        result: "Already Has Card",
+        saleAmount: 0,
+        skipLater: false
+      },
+      {
+        id: "demo-301",
+        address: "812 E Sample Timpanogos Way (Fictional)",
+        street: "E Sample Timpanogos Way",
+        segment: "800 E Block",
+        ring: "Ring 2 - Foothills",
+        latitude: 40.2550,
+        longitude: -111.6420,
+        status: "Unvisited",
+        notes: "Fictional sample house #9. Corner lot with pine trees.",
+        lastVisit: "",
+        result: "",
+        saleAmount: 0,
+        skipLater: false
+      },
+      {
+        id: "demo-302",
+        address: "818 E Sample Timpanogos Way (Fictional)",
+        street: "E Sample Timpanogos Way",
+        segment: "800 E Block",
+        ring: "Ring 2 - Foothills",
+        latitude: 40.2551,
+        longitude: -111.6415,
+        status: "Interested - Follow Up",
+        notes: "Fictional sample: Mom said husband gets home at 6 PM and always buys two cards.",
+        lastVisit: new Date(Date.now() - 3600 * 1000 * 1.5).toISOString(),
+        result: "Return @ 6:00pm",
+        saleAmount: 0,
+        skipLater: false
+      },
+      {
+        id: "demo-303",
+        address: "824 E Sample Timpanogos Way (Fictional)",
+        street: "E Sample Timpanogos Way",
+        segment: "800 E Block",
+        ring: "Ring 2 - Foothills",
+        latitude: 40.2552,
+        longitude: -111.6410,
+        status: "Sold",
+        notes: "Fictional sample: Bought 2 cards ($60 total) for student gifts.",
+        lastVisit: new Date(Date.now() - 3600 * 1000 * 1).toISOString(),
+        result: "2 Cards Sold",
+        saleAmount: 60,
+        skipLater: false
+      },
+      {
+        id: "demo-304",
+        address: "830 E Sample Timpanogos Way (Fictional)",
+        street: "E Sample Timpanogos Way",
+        segment: "800 E Block",
+        ring: "Ring 2 - Foothills",
+        latitude: 40.2553,
+        longitude: -111.6405,
+        status: "Do Not Visit",
+        notes: "Fictional sample: 'No Soliciting - Day Sleeper' sign on gate.",
+        lastVisit: new Date(Date.now() - 3600 * 1000 * 6).toISOString(),
+        result: "No Soliciting Sign",
+        saleAmount: 0,
+        skipLater: false
+      }
+    ];
+
+    /* =========================================================================
+       STATE MANAGEMENT
+       ========================================================================= */
+    let houses = [];
+    let dailyLogs = []; // Tracks knocks & timestamps for daily sitrep
+    let econConfig = { cardPrice: 30, cardComm: 15 };
+
+    let activeTab = "route";
+    let activeListFilter = "ALL";
+    let activeRouteSector = "ALL";
+    let routeQueueIndex = 0; // Allows cycling through next best unvisited houses
+    let currentDetailHouseId = null;
+    let collapsedStreets = {};
+
+    // Optional Leaflet Map instances
+    let leafletMap = null;
+    let leafletMarkers = [];
+    let mapVisible = false;
+
+    /* =========================================================================
+       INITIALIZATION & STORAGE
+       ========================================================================= */
+    window.addEventListener("DOMContentLoaded", () => {
+      loadFromStorage();
+      populateSectorDropdowns();
+      refreshAllViews();
+    });
+
+    function loadFromStorage() {
+      try {
+        const rawHouses = localStorage.getItem(STORAGE_KEY_HOUSES);
+        if (rawHouses) {
+          houses = JSON.parse(rawHouses);
+        } else {
+          houses = JSON.parse(JSON.stringify(FICTIONAL_SAMPLE_HOUSES));
+          saveHouses();
+        }
+
+        const rawLogs = localStorage.getItem(STORAGE_KEY_LOGS);
+        if (rawLogs) {
+          dailyLogs = JSON.parse(rawLogs);
+        } else {
+          // Seed initial demo knocks from sample data
+          seedInitialDemoLogs();
+        }
+
+        const rawEcon = localStorage.getItem(STORAGE_KEY_ECON);
+        if (rawEcon) {
+          econConfig = JSON.parse(rawEcon);
+          document.getElementById("cfg-card-price").value = econConfig.cardPrice || 30;
+          document.getElementById("cfg-card-comm").value = econConfig.cardComm || 15;
+        }
+      } catch (err) {
+        console.error("Storage load error, falling back to demo data:", err);
+        houses = JSON.parse(JSON.stringify(FICTIONAL_SAMPLE_HOUSES));
+      }
+    }
+
+    function seedInitialDemoLogs() {
+      const todayStr = getLocalDayString(new Date());
+      dailyLogs = [
+        { ts: new Date().toISOString(), day: todayStr, houseId: "demo-103", status: "Interested - Follow Up" },
+        { ts: new Date().toISOString(), day: todayStr, houseId: "demo-104", status: "Sold" },
+        { ts: new Date().toISOString(), day: todayStr, houseId: "demo-202", status: "Knocked - No Answer" },
+        { ts: new Date().toISOString(), day: todayStr, houseId: "demo-204", status: "Not Interested" },
+        { ts: new Date().toISOString(), day: todayStr, houseId: "demo-302", status: "Interested - Follow Up" },
+        { ts: new Date().toISOString(), day: todayStr, houseId: "demo-303", status: "Sold" }
+      ];
+      localStorage.setItem(STORAGE_KEY_LOGS, JSON.stringify(dailyLogs));
+    }
+
+    function saveHouses() {
+      localStorage.setItem(STORAGE_KEY_HOUSES, JSON.stringify(houses));
+    }
+
+    function recordKnockLog(houseId, status) {
+      const now = new Date();
+      dailyLogs.push({
+        ts: now.toISOString(),
+        day: getLocalDayString(now),
+        houseId,
+        status
+      });
+      localStorage.setItem(STORAGE_KEY_LOGS, JSON.stringify(dailyLogs));
+    }
+
+    function saveEconConfig() {
+      const price = parseFloat(document.getElementById("cfg-card-price").value) || 30;
+      const comm  = parseFloat(document.getElementById("cfg-card-comm").value) || 15;
+      econConfig = { cardPrice: price, cardComm: comm };
+      localStorage.setItem(STORAGE_KEY_ECON, JSON.stringify(econConfig));
+      refreshAllViews();
+      showToast("Card Economics Saved");
+    }
+
+    /* =========================================================================
+       UTILITIES & HELPERS
+       ========================================================================= */
+    function getLocalDayString(dateObj) {
+      const y = dateObj.getFullYear();
+      const m = String(dateObj.getMonth() + 1).padStart(2, "0");
+      const d = String(dateObj.getDate()).padStart(2, "0");
+      return `${y}-${m}-${d}`;
+    }
+
+    function formatTimestamp(isoStr) {
+      if (!isoStr) return "Never";
+      const d = new Date(isoStr);
+      if (isNaN(d.getTime())) return isoStr;
+      return d.toLocaleString([], {
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit"
+      });
+    }
+
+    function getStatusBadgeClass(status) {
+      switch (status) {
+        case "Unvisited": return "st-unvisited";
+        case "Knocked - No Answer": return "st-no-answer";
+        case "Not Interested": return "st-not-interested";
+        case "Interested - Follow Up": return "st-follow-up";
+        case "Sold": return "st-sold";
+        case "Do Not Visit": return "st-dnv";
+        default: return "st-unvisited";
+      }
+    }
+
+    function extractHouseNumber(address) {
+      const match = String(address || "").match(/^\s*(\d+)/);
+      return match ? parseInt(match[1], 10) : 999999;
+    }
+
+    function getStreetSegmentKey(house) {
+      const st = (house.street || "Unassigned Street").trim();
+      const seg = (house.segment || "").trim();
+      return seg ? `${st} — ${seg}` : st;
+    }
+
+    function escapeHtml(str) {
+      return String(str || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function showToast(msg) {
+      const el = document.getElementById("toast");
+      el.textContent = msg;
+      el.style.display = "block";
+      clearTimeout(window._toastTimer);
+      window._toastTimer = setTimeout(() => {
+        el.style.display = "none";
+      }, 2100);
+    }
+
+    /* =========================================================================
+       NAVIGATION & MASTER REFRESH
+       ========================================================================= */
+    function switchTab(tabName) {
+      activeTab = tabName;
+      document.querySelectorAll(".view-section").forEach(sec => sec.classList.remove("active"));
+      const targetSec = document.getElementById(`view-${tabName}`);
+      if (targetSec) targetSec.classList.add("active");
+
+      document.querySelectorAll(".nav-btn").forEach(btn => {
+        btn.classList.toggle("active", btn.getAttribute("data-tab") === tabName);
+      });
+
+      refreshAllViews();
+      if (tabName === "route" && mapVisible && leafletMap) {
+        setTimeout(() => leafletMap.invalidateSize(), 150);
+      }
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function refreshAllViews() {
+      updateHeaderTelemetry();
+      renderRouteView();
+      renderListView();
+      renderFollowUpView();
+      renderDashboardView();
+      renderPrintChecklist();
+      if (mapVisible) updateMapMarkers();
+    }
+
+    function populateSectorDropdowns() {
+      const routeSel = document.getElementById("route-segment-select");
+      const printSel = document.getElementById("print-segment-select");
+
+      const keys = Array.from(new Set(houses.map(getStreetSegmentKey))).sort();
+
+      const prevRouteVal = routeSel.value || "ALL";
+      routeSel.innerHTML = `<option value="ALL">All Sectors (${houses.length} Doors)</option>` +
+        keys.map(k => `<option value="${escapeHtml(k)}">${escapeHtml(k)}</option>`).join("");
+      if (keys.includes(prevRouteVal) || prevRouteVal === "ALL") {
+        routeSel.value = prevRouteVal;
+      }
+
+      const prevPrintVal = printSel.value || (keys[0] || "ALL");
+      printSel.innerHTML = keys.map(k => `<option value="${escapeHtml(k)}">${escapeHtml(k)}</option>`).join("") +
+        `<option value="ALL">Entire Route (${houses.length} Doors)</option>`;
+      if (keys.includes(prevPrintVal) || prevPrintVal === "ALL") {
+        printSel.value = prevPrintVal;
+      }
+    }
+
+    /* =========================================================================
+       HEADER & DAILY TELEMETRY CALCULATIONS
+       ========================================================================= */
+    function getDailyTelemetry() {
+      const todayStr = getLocalDayString(new Date());
+      const todayKnocks = dailyLogs.filter(l => l.day === todayStr).length;
+
+      // Sales logged today
+      const soldHousesToday = houses.filter(h => {
+        if (h.status !== "Sold") return false;
+        if (!h.lastVisit) return true;
+        return getLocalDayString(new Date(h.lastVisit)) === todayStr;
+      });
+
+      let todayGross = 0;
+      let todayCards = 0;
+      soldHousesToday.forEach(h => {
+        const amt = parseFloat(h.saleAmount) > 0 ? parseFloat(h.saleAmount) : econConfig.cardPrice;
+        todayGross += amt;
+        todayCards += Math.max(1, Math.round(amt / econConfig.cardPrice));
+      });
+      const todayComm = todayCards * econConfig.cardComm;
+
+      return { todayKnocks, todaySalesCount: soldHousesToday.length, todayCards, todayGross, todayComm };
+    }
+
+    function updateHeaderTelemetry() {
+      const t = getDailyTelemetry();
+      document.getElementById("hdr-knocks").textContent = `K: ${t.todayKnocks}`;
+      document.getElementById("hdr-sold").textContent   = `S: ${t.todaySalesCount}`;
+      document.getElementById("hdr-earn").textContent   = `$${t.todayComm.toFixed(0)}`;
+
+      // Update Follow-Up nav badge
+      const fuCount = houses.filter(h => h.status === "Interested - Follow Up" || h.skipLater).length;
+      const badge = document.getElementById("nav-fu-badge");
+      if (fuCount > 0) {
+        badge.style.display = "inline-block";
+        badge.textContent = fuCount;
+      } else {
+        badge.style.display = "none";
+      }
+    }
+
+    /* =========================================================================
+       VIEW 1: ROUTE MODE (NEXT BEST UNVISITED HOUSE FLOW)
+       ========================================================================= */
+    function onRouteSectorChange() {
+      activeRouteSector = document.getElementById("route-segment-select").value;
+      routeQueueIndex = 0;
+      renderRouteView();
+      if (mapVisible) updateMapMarkers();
+    }
+
+    function getOrderedRouteQueue() {
+      // Filter to unvisited houses (plus optional sector filter)
+      let pool = houses.filter(h => h.status === "Unvisited");
+      if (activeRouteSector !== "ALL") {
+        pool = pool.filter(h => getStreetSegmentKey(h) === activeRouteSector);
+      }
+
+      // Sort: Non-skipped unvisited first, then by Ring, Street/Segment, and House Number
+      pool.sort((a, b) => {
+        if (Boolean(a.skipLater) !== Boolean(b.skipLater)) {
+          return a.skipLater ? 1 : -1;
+        }
+        const ringCmp = String(a.ring || "").localeCompare(String(b.ring || ""));
+        if (ringCmp !== 0) return ringCmp;
+        const segCmp = getStreetSegmentKey(a).localeCompare(getStreetSegmentKey(b));
+        if (segCmp !== 0) return segCmp;
+        return extractHouseNumber(a.address) - extractHouseNumber(b.address);
+      });
+
+      return pool;
+    }
+
+    function renderRouteView() {
+      const queue = getOrderedRouteQueue();
+      const targetContainer = document.getElementById("route-target-container");
+      const upcomingContainer = document.getElementById("route-upcoming-list");
+      const remLabel = document.getElementById("route-remaining-count");
+
+      remLabel.textContent = `${queue.length} Unvisited`;
+
+      if (queue.length === 0) {
+        targetContainer.innerHTML = `
+          <div class="target-card" style="text-align: center; padding: 26px 16px;">
+            <div class="badge st-sold" style="margin-bottom: 8px;">Sector Cleared</div>
+            <h2 style="font-size: 1.3rem; margin-bottom: 6px;">All Unvisited Doors Knocked</h2>
+            <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 16px;">
+              Switch sectors above, check your Follow-Up Queue, or review Knocked - No Answer doors in the Streets tab.
+            </p>
+            <div style="display: flex; gap: 8px; justify-content: center;">
+              <button class="btn btn-brass" onclick="switchTab('followup')">Open Follow-Ups</button>
+              <button class="btn btn-fde" onclick="switchTab('list')">Browse Streets</button>
+            </div>
+          </div>
+        `;
+        upcomingContainer.innerHTML = `<div style="font-size:0.85rem; color:var(--text-muted);">Queue empty.</div>`;
+        return;
+      }
+
+      if (routeQueueIndex >= queue.length) routeQueueIndex = 0;
+      if (routeQueueIndex < 0) routeQueueIndex = queue.length - 1;
+
+      const current = queue[routeQueueIndex];
+
+      targetContainer.innerHTML = `
+        <div class="target-card">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span class="badge st-unvisited">Next Target (${routeQueueIndex + 1} of ${queue.length})</span>
+            ${current.skipLater ? `<span class="flag-badge">Come Back Flagged</span>` : ""}
+          </div>
+
+          <div class="target-address">${escapeHtml(current.address)}</div>
+
+          <div class="target-meta">
+            <span>Street: <strong>${escapeHtml(current.street || "N/A")}</strong></span>
+            ${current.segment ? `<span>Seg: <strong>${escapeHtml(current.segment)}</strong></span>` : ""}
+            ${current.ring ? `<span>${escapeHtml(current.ring)}</span>` : ""}
+          </div>
+
+          <!-- Quick Field Note Input right in Route Mode -->
+          <div style="margin-bottom: 10px;">
+            <input type="text" id="route-quick-note" value="${escapeHtml(current.notes || "")}"
+                   placeholder="Quick note (e.g. Dog in yard, Venmo, callback time)…"
+                   onchange="saveQuickRouteNote('${current.id}', this.value)" />
+          </div>
+
+          <!-- Big 2x3 One-Handed Knock Result Grid -->
+          <div class="knock-grid">
+            <button class="btn knock-btn kb-sold" onclick="logRouteKnock('${current.id}', 'Sold')">
+              SOLD CARD
+              <small>+1 Sale ($${econConfig.cardPrice})</small>
+            </button>
+            <button class="btn knock-btn kb-followup" onclick="logRouteKnock('${current.id}', 'Interested - Follow Up')">
+              FOLLOW UP
+              <small>Interested / Callback</small>
+            </button>
+            <button class="btn knock-btn kb-noans" onclick="logRouteKnock('${current.id}', 'Knocked - No Answer')">
+              NO ANSWER
+              <small>Knocked Door</small>
+            </button>
+            <button class="btn knock-btn kb-notint" onclick="logRouteKnock('${current.id}', 'Not Interested')">
+              NOT INTERESTED
+              <small>Polite Pass</small>
+            </button>
+            <button class="btn knock-btn kb-skip" onclick="skipCurrentRouteHouse('${current.id}')">
+              SKIP / LATER
+              <small>Cycle Next House</small>
+            </button>
+            <button class="btn knock-btn kb-dnv" onclick="logRouteKnock('${current.id}', 'Do Not Visit')">
+              DO NOT VISIT
+              <small>No Soliciting</small>
+            </button>
+          </div>
+
+          <div style="display: flex; gap: 8px; margin-top: 12px;">
+            <button class="btn btn-charcoal" style="flex: 1; min-height: 40px;" onclick="stepRouteQueue(-1)">&larr; Prev</button>
+            <button class="btn btn-charcoal" style="flex: 2; min-height: 40px;" onclick="openDetailModal('${current.id}')">Full Detail / Custom $</button>
+            <button class="btn btn-charcoal" style="flex: 1; min-height: 40px;" onclick="stepRouteQueue(1)">Next &rarr;</button>
+          </div>
+        </div>
+      `;
+
+      // Render Next 4 Upcoming Houses
+      const upcoming = queue.slice(routeQueueIndex + 1, routeQueueIndex + 5);
+      if (upcoming.length === 0) {
+        upcomingContainer.innerHTML = `<div style="font-size: 0.82rem; color: var(--text-muted);">No additional unvisited houses after this target in current sector.</div>`;
+      } else {
+        upcomingContainer.innerHTML = upcoming.map((h, idx) => `
+          <div class="house-row" onclick="openDetailModal('${h.id}')">
+            <div class="house-row-main">
+              <div class="house-row-addr">
+                <span class="mono" style="color: var(--accent-brass); font-size:0.85rem;">#${routeQueueIndex + idx + 2}</span>
+                ${escapeHtml(h.address)}
+                ${h.skipLater ? `<span class="flag-badge">Come Back</span>` : ""}
+              </div>
+              <div class="house-row-notes">${escapeHtml(h.notes || getStreetSegmentKey(h))}</div>
+            </div>
+            <span class="badge st-unvisited">Queue</span>
+          </div>
+        `).join("");
+      }
+    }
+
+    function saveQuickRouteNote(houseId, noteVal) {
+      const h = houses.find(x => x.id === houseId);
+      if (!h) return;
+      h.notes = noteVal.trim();
+      saveHouses();
+      showToast("Note Updated");
+    }
+
+    function logRouteKnock(houseId, newStatus) {
+      const h = houses.find(x => x.id === houseId);
+      if (!h) return;
+
+      const noteInput = document.getElementById("route-quick-note");
+      if (noteInput) {
+        h.notes = noteInput.value.trim();
+      }
+
+      h.status = newStatus;
+      h.lastVisit = new Date().toISOString();
+      h.result = newStatus;
+
+      if (newStatus === "Sold" && (!h.saleAmount || h.saleAmount <= 0)) {
+        h.saleAmount = econConfig.cardPrice;
+      }
+      if (newStatus === "Sold" || newStatus === "Not Interested" || newStatus === "Do Not Visit") {
+        h.skipLater = false;
+      }
+
+      recordKnockLog(houseId, newStatus);
+      saveHouses();
+      refreshAllViews();
+      showToast(`Logged: ${newStatus}`);
+    }
+
+    function skipCurrentRouteHouse(houseId) {
+      const h = houses.find(x => x.id === houseId);
+      if (h) {
+        const noteInput = document.getElementById("route-quick-note");
+        if (noteInput) h.notes = noteInput.value.trim();
+        h.skipLater = true;
+        saveHouses();
+      }
+      routeQueueIndex = 0; // Since skipLater pushes it to the back of the unvisited queue
+      refreshAllViews();
+      showToast("Flagged Come Back Later & Cycled Next");
+    }
+
+    function stepRouteQueue(delta) {
+      routeQueueIndex += delta;
+      renderRouteView();
+    }
+
+    /* =========================================================================
+       OPTIONAL LEAFLET MAP (OFFLINE-SAFE DEGRADATION)
+       ========================================================================= */
+    function toggleRouteMap() {
+      const container = document.getElementById("map-container");
+      const notice = document.getElementById("map-offline-notice");
+      mapVisible = !mapVisible;
+
+      if (!mapVisible) {
+        container.style.display = "none";
+        notice.style.display = "none";
+        return;
+      }
+
+      container.style.display = "block";
+      if (typeof window.L === "undefined") {
+        container.style.display = "none";
+        notice.style.display = "block";
+        return;
+      }
+
+      if (!leafletMap) {
+        try {
+          leafletMap = L.map("map-container").setView([40.2518, -111.6510], 15);
+          const tileLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            maxZoom: 19,
+            attribution: "&copy; OpenStreetMap"
+          });
+          tileLayer.on("tileerror", () => {
+            notice.style.display = "block";
+          });
+          tileLayer.addTo(leafletMap);
+        } catch (e) {
+          notice.style.display = "block";
+        }
+      }
+
+      setTimeout(() => {
+        if (leafletMap) {
+          leafletMap.invalidateSize();
+          updateMapMarkers();
+        }
+      }, 150);
+    }
+
+    function updateMapMarkers() {
+      if (!leafletMap || typeof window.L === "undefined") return;
+      leafletMarkers.forEach(m => leafletMap.removeLayer(m));
+      leafletMarkers = [];
+
+      const bounds = [];
+      houses.forEach(h => {
+        const lat = parseFloat(h.latitude);
+        const lng = parseFloat(h.longitude);
+        if (!isNaN(lat) && !isNaN(lng)) {
+          const color = h.status === "Sold" ? "#476930"
+                      : h.status === "Interested - Follow Up" ? "#c89632"
+                      : h.status === "Unvisited" ? "#c8a253"
+                      : "#6c757d";
+          const marker = L.circleMarker([lat, lng], {
+            radius: 8,
+            fillColor: color,
+            color: "#111",
+            weight: 2,
+            fillOpacity: 0.9
+          }).addTo(leafletMap);
+          marker.bindPopup(`<strong>${escapeHtml(h.address)}</strong><br/>${escapeHtml(h.status)}`);
+          marker.on("click", () => openDetailModal(h.id));
+          leafletMarkers.push(marker);
+          bounds.push([lat, lng]);
+        }
+      });
+
+      if (bounds.length > 0) {
+        leafletMap.fitBounds(bounds, { padding: [20, 20], maxZoom: 17 });
+      }
+    }
+
+    /* =========================================================================
+       VIEW 2: LIST VIEW (GROUPED BY STREET/SEGMENT + FILTERS)
+       ========================================================================= */
+    function setListFilter(filterKey) {
+      activeListFilter = filterKey;
+      document.querySelectorAll("#list-filter-chips .chip").forEach(c => {
+        c.classList.toggle("active", c.getAttribute("data-filter") === filterKey);
+      });
+      renderListView();
+    }
+
+    function toggleStreetCollapse(groupKey) {
+      collapsedStreets[groupKey] = !collapsedStreets[groupKey];
+      renderListView();
+    }
+
+    function toggleAllStreetGroups() {
+      const keys = Array.from(new Set(houses.map(getStreetSegmentKey)));
+      const anyOpen = keys.some(k => !collapsedStreets[k]);
+      keys.forEach(k => { collapsedStreets[k] = anyOpen; });
+      renderListView();
+    }
+
+    function renderListView() {
+      const query = (document.getElementById("list-search").value || "").toLowerCase().trim();
+      const container = document.getElementById("list-groups-container");
+      const countEl = document.getElementById("list-showing-count");
+
+      // Group all houses by street/segment first to compute street completion
+      const allGroups = {};
+      houses.forEach(h => {
+        const gKey = getStreetSegmentKey(h);
+        if (!allGroups[gKey]) allGroups[gKey] = [];
+        allGroups[gKey].push(h);
+      });
+
+      const streetStats = {};
+      Object.keys(allGroups).forEach(gKey => {
+        const list = allGroups[gKey];
+        const visited = list.filter(x => x.status !== "Unvisited").length;
+        const pct = list.length > 0 ? Math.round((visited / list.length) * 100) : 0;
+        streetStats[gKey] = { total: list.length, visited, pct };
+      });
+
+      // Filter houses
+      let filtered = houses.filter(h => {
+        const gKey = getStreetSegmentKey(h);
+        const stStat = streetStats[gKey];
+
+        if (activeListFilter === "SKIP_LATER" && !h.skipLater) return false;
+        if (activeListFilter === "INCOMPLETE_STREETS" && stStat.pct === 100) return false;
+        if (activeListFilter === "COMPLETE_STREETS" && stStat.pct < 100) return false;
+        if (
+          activeListFilter !== "ALL" &&
+          activeListFilter !== "SKIP_LATER" &&
+          activeListFilter !== "INCOMPLETE_STREETS" &&
+          activeListFilter !== "COMPLETE_STREETS"
+        ) {
+          if (h.status !== activeListFilter) return false;
+        }
+
+        if (query) {
+          const hay = `${h.address} ${h.street} ${h.segment} ${h.ring} ${h.notes} ${h.result} ${h.status}`.toLowerCase();
+          if (!hay.includes(query)) return false;
+        }
+        return true;
+      });
+
+      countEl.textContent = `Showing ${filtered.length} of ${houses.length} doors`;
+
+      if (filtered.length === 0) {
+        container.innerHTML = `
+          <div class="tac-panel" style="text-align: center; color: var(--text-muted);">
+            No houses match current search or filter criteria.
+          </div>
+        `;
+        return;
+      }
+
+      // Group filtered houses by Street / Segment
+      const filteredGroups = {};
+      filtered.forEach(h => {
+        const gKey = getStreetSegmentKey(h);
+        if (!filteredGroups[gKey]) filteredGroups[gKey] = [];
+        filteredGroups[gKey].push(h);
+      });
+
+      const sortedKeys = Object.keys(filteredGroups).sort();
+
+      container.innerHTML = sortedKeys.map(gKey => {
+        const groupHouses = filteredGroups[gKey].sort((a, b) => extractHouseNumber(a.address) - extractHouseNumber(b.address));
+        const st = streetStats[gKey];
+        const isCollapsed = Boolean(collapsedStreets[gKey]);
+
+        return `
+          <div class="street-group">
+            <div class="street-header" onclick="toggleStreetCollapse('${escapeHtml(gKey).replace(/'/g, "\\'")}')">
+              <div>
+                <div class="street-header-title">${escapeHtml(gKey)}</div>
+                <div class="street-header-sub">${st.visited}/${st.total} Visited (${st.pct}% Street Complete)</div>
+              </div>
+              <div class="mono" style="font-size: 0.85rem; color: var(--accent-brass);">
+                ${isCollapsed ? "[+]" : "[-]"}
+              </div>
+            </div>
+            ${isCollapsed ? "" : groupHouses.map(h => `
+              <div class="house-row" onclick="openDetailModal('${h.id}')">
+                <div class="house-row-main">
+                  <div class="house-row-addr">
+                    ${escapeHtml(h.address)}
+                    ${h.skipLater ? `<span class="flag-badge">Come Back</span>` : ""}
+                    ${h.status === "Sold" && h.saleAmount ? `<span class="badge st-sold mono">$${h.saleAmount}</span>` : ""}
+                  </div>
+                  ${h.notes ? `<div class="house-row-notes">${escapeHtml(h.notes)}</div>` : ""}
+                  <div class="house-row-meta mono">
+                    ${h.ring ? `${escapeHtml(h.ring)} • ` : ""}Last: ${formatTimestamp(h.lastVisit)}
+                  </div>
+                </div>
+                <span class="badge ${getStatusBadgeClass(h.status)}">${escapeHtml(h.status)}</span>
+              </div>
+            `).join("")}
+          </div>
+        `;
+      }).join("");
+    }
+
+    /* =========================================================================
+       VIEW 3: FOLLOW-UP QUEUE
+       ========================================================================= */
+    function renderFollowUpView() {
+      const container = document.getElementById("followup-list-container");
+      const badge = document.getElementById("fu-total-badge");
+
+      // Interested - Follow Up rises to the very top, followed by Skip/Come Back Later
+      const fuHouses = houses.filter(h => h.status === "Interested - Follow Up" || h.skipLater);
+
+      fuHouses.sort((a, b) => {
+        const aPri = a.status === "Interested - Follow Up" ? 0 : 1;
+        const bPri = b.status === "Interested - Follow Up" ? 0 : 1;
+        if (aPri !== bPri) return aPri - bPri;
+        const aTime = a.lastVisit ? new Date(a.lastVisit).getTime() : 0;
+        const bTime = b.lastVisit ? new Date(b.lastVisit).getTime() : 0;
+        return bTime - aTime;
+      });
+
+      badge.textContent = `${fuHouses.length} Due`;
+
+      if (fuHouses.length === 0) {
+        container.innerHTML = `
+          <div class="tac-panel" style="text-align: center; color: var(--text-muted);">
+            No active follow-ups or flagged callbacks right now.
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = fuHouses.map(h => `
+        <div class="tac-panel" style="border-left-color: var(--st-follow-up);">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
+            <div>
+              <div style="font-size: 0.74rem; color: var(--accent-brass); font-weight: 800; text-transform: uppercase;">
+                ${escapeHtml(getStreetSegmentKey(h))}
+              </div>
+              <div style="font-size: 1.15rem; font-weight: 900; margin: 2px 0;">
+                ${escapeHtml(h.address)}
+              </div>
+            </div>
+            <span class="badge ${getStatusBadgeClass(h.status)}">${escapeHtml(h.status)}</span>
+          </div>
+
+          <div style="background: #161819; border: 1px solid #2e3234; padding: 10px; border-radius: 4px; margin: 8px 0; font-size: 0.88rem;">
+            <strong>Notes:</strong> ${escapeHtml(h.notes || "No notes logged.")}
+          </div>
+
+          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 10px;">
+            <span class="mono">Last Visit: ${formatTimestamp(h.lastVisit)}</span>
+            ${h.skipLater ? `<span class="flag-badge">Flagged Come Back</span>` : ""}
+          </div>
+
+          <div style="display: flex; gap: 8px;">
+            <button class="btn btn-brass" style="flex: 1; min-height: 42px;" onclick="logRouteKnock('${h.id}', 'Sold')">Mark Sold ($${econConfig.cardPrice})</button>
+            <button class="btn btn-fde" style="flex: 1; min-height: 42px;" onclick="openDetailModal('${h.id}')">Update / Notes</button>
+          </div>
+        </div>
+      `).join("");
+    }
+
+    /* =========================================================================
+       VIEW 4: DASHBOARD & STREET COMPLETION
+       ========================================================================= */
+    function renderDashboardView() {
+      const t = getDailyTelemetry();
+      document.getElementById("dash-date-label").textContent = getLocalDayString(new Date());
+      document.getElementById("dash-today-knocks").textContent = t.todayKnocks;
+      document.getElementById("dash-today-sales").textContent  = t.todaySalesCount;
+      document.getElementById("dash-today-rev").textContent    = `$${t.todayGross.toFixed(0)}`;
+      document.getElementById("dash-today-comm").textContent   = `$${t.todayComm.toFixed(0)}`;
+
+      const total = houses.length;
+      const visited = houses.filter(h => h.status !== "Unvisited").length;
+      const soldHouses = houses.filter(h => h.status === "Sold");
+      const fuDue = houses.filter(h => h.status === "Interested - Follow Up").length;
+      const overallPct = total > 0 ? Math.round((visited / total) * 100) : 0;
+
+      let allTimeGross = 0;
+      let allTimeCards = 0;
+      soldHouses.forEach(h => {
+        const amt = parseFloat(h.saleAmount) > 0 ? parseFloat(h.saleAmount) : econConfig.cardPrice;
+        allTimeGross += amt;
+        allTimeCards += Math.max(1, Math.round(amt / econConfig.cardPrice));
+      });
+      const allTimeComm = allTimeCards * econConfig.cardComm;
+
+      document.getElementById("dash-overall-pct").textContent    = `${overallPct}% Visited`;
+      document.getElementById("dash-total-houses").textContent   = total;
+      document.getElementById("dash-visited-houses").textContent = visited;
+      document.getElementById("dash-total-sold").textContent     = allTimeCards;
+      document.getElementById("dash-total-fu").textContent       = fuDue;
+      document.getElementById("dash-alltime-rev").textContent    = `$${allTimeGross.toFixed(0)}`;
+      document.getElementById("dash-alltime-comm").textContent   = `$${allTimeComm.toFixed(0)}`;
+
+      // Street Completion Breakdown
+      const groups = {};
+      houses.forEach(h => {
+        const k = getStreetSegmentKey(h);
+        if (!groups[k]) groups[k] = [];
+        groups[k].push(h);
+      });
+
+      const streetContainer = document.getElementById("dash-street-progress");
+      const sortedKeys = Object.keys(groups).sort();
+
+      streetContainer.innerHTML = sortedKeys.map(k => {
+        const list = groups[k];
+        const vis = list.filter(h => h.status !== "Unvisited").length;
+        const sld = list.filter(h => h.status === "Sold").length;
+        const pct = list.length > 0 ? Math.round((vis / list.length) * 100) : 0;
+
+        return `
+          <div style="margin-bottom: 12px;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.84rem; font-weight: 700;">
+              <span>${escapeHtml(k)}</span>
+              <span class="mono" style="color: var(--accent-brass);">${vis}/${list.length} (${pct}%) • ${sld} Sold</span>
+            </div>
+            <div class="progress-bar-wrap">
+              <div class="progress-bar-fill" style="width: ${pct}%;"></div>
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    /* =========================================================================
+       DETAIL PANEL MODAL (PER HOUSE)
+       ========================================================================= */
+    function openDetailModal(houseId) {
+      const h = houses.find(x => x.id === houseId);
+      if (!h) return;
+      currentDetailHouseId = houseId;
+
+      document.getElementById("mdl-street-seg").textContent = getStreetSegmentKey(h);
+      document.getElementById("mdl-address").textContent    = h.address;
+      document.getElementById("mdl-last-visit").textContent = formatTimestamp(h.lastVisit);
+      document.getElementById("mdl-ring").textContent       = h.ring || "N/A";
+      document.getElementById("mdl-sale-amount").value      = h.saleAmount || (h.status === "Sold" ? econConfig.cardPrice : "");
+      document.getElementById("mdl-result").value           = h.result || "";
+      document.getElementById("mdl-notes").value            = h.notes || "";
+
+      renderModalStatusGrid(h.status);
+      updateModalSkipFlagButton(Boolean(h.skipLater));
+
+      document.getElementById("detail-modal").classList.add("open");
+    }
+
+    function renderModalStatusGrid(selectedStatus) {
+      const grid = document.getElementById("mdl-status-grid");
+      grid.setAttribute("data-selected-status", selectedStatus);
+
+      grid.innerHTML = HOUSE_STATUSES.map(st => {
+        const isSel = st === selectedStatus;
+        return `
+          <button type="button" class="st-opt-btn ${isSel ? "selected" : ""}"
+                  onclick="selectModalStatus('${st}')">
+            <span class="badge ${getStatusBadgeClass(st)}" style="display:block; margin-bottom:3px;">${st}</span>
+          </button>
+        `;
+      }).join("");
+    }
+
+    function selectModalStatus(st) {
+      renderModalStatusGrid(st);
+      const saleInput = document.getElementById("mdl-sale-amount");
+      if (st === "Sold" && (!saleInput.value || parseFloat(saleInput.value) <= 0)) {
+        saleInput.value = econConfig.cardPrice;
+      }
+    }
+
+    function toggleModalSkipFlag() {
+      const btn = document.getElementById("mdl-skip-flag-btn");
+      const current = btn.getAttribute("data-flag") === "true";
+      updateModalSkipFlagButton(!current);
+    }
+
+    function updateModalSkipFlagButton(isFlagged) {
+      const btn = document.getElementById("mdl-skip-flag-btn");
+      btn.setAttribute("data-flag", isFlagged ? "true" : "false");
+      if (isFlagged) {
+        btn.className = "btn btn-brass btn-block";
+        btn.textContent = "Flag: Skip / Come Back Later (ACTIVE)";
+      } else {
+        btn.className = "btn btn-charcoal btn-block";
+        btn.textContent = "Flag: Skip / Come Back Later (OFF)";
+      }
+    }
+
+    function saveDetailModal() {
+      const h = houses.find(x => x.id === currentDetailHouseId);
+      if (!h) return;
+
+      const newStatus = document.getElementById("mdl-status-grid").getAttribute("data-selected-status") || h.status;
+      const skipFlag  = document.getElementById("mdl-skip-flag-btn").getAttribute("data-flag") === "true";
+      const saleAmt   = parseFloat(document.getElementById("mdl-sale-amount").value) || 0;
+      const resText   = document.getElementById("mdl-result").value.trim();
+      const notesText = document.getElementById("mdl-notes").value.trim();
+
+      const statusChanged = h.status !== newStatus;
+      h.status     = newStatus;
+      h.skipLater  = skipFlag;
+      h.saleAmount = newStatus === "Sold" ? (saleAmt > 0 ? saleAmt : econConfig.cardPrice) : saleAmt;
+      h.result     = resText || newStatus;
+      h.notes      = notesText;
+      h.lastVisit  = new Date().toISOString();
+
+      if (statusChanged || newStatus !== "Unvisited") {
+        recordKnockLog(h.id, newStatus);
+      }
+
+      saveHouses();
+      closeDetailModal();
+      refreshAllViews();
+      showToast("House Record Saved");
+    }
+
+    function deleteCurrentHouse() {
+      if (!currentDetailHouseId) return;
+      if (!confirm("Delete this door from your route list?")) return;
+      houses = houses.filter(x => x.id !== currentDetailHouseId);
+      saveHouses();
+      populateSectorDropdowns();
+      closeDetailModal();
+      refreshAllViews();
+      showToast("Door Deleted");
+    }
+
+    function closeDetailModal() {
+      document.getElementById("detail-modal").classList.remove("open");
+      currentDetailHouseId = null;
+    }
+
+    function handleBackdropClick(e) {
+      if (e.target.id === "detail-modal") closeDetailModal();
+    }
+
+    /* =========================================================================
+       ADD NEW HOUSE MODAL
+       ========================================================================= */
+    function openAddHouseModal() {
+      document.getElementById("add-modal").classList.add("open");
+    }
+
+    function closeAddHouseModal() {
+      document.getElementById("add-modal").classList.remove("open");
+    }
+
+    function saveNewHouse() {
+      const address = document.getElementById("add-address").value.trim();
+      const street  = document.getElementById("add-street").value.trim();
+      if (!address || !street) {
+        showToast("Address and Street required");
+        return;
+      }
+
+      const newHouse = {
+        id: "door-" + Date.now() + "-" + Math.random().toString(36).substring(2, 6),
+        address,
+        street,
+        segment: document.getElementById("add-segment").value.trim(),
+        ring: document.getElementById("add-ring").value.trim(),
+        latitude: parseFloat(document.getElementById("add-lat").value) || null,
+        longitude: parseFloat(document.getElementById("add-lng").value) || null,
+        status: "Unvisited",
+        notes: document.getElementById("add-notes").value.trim(),
+        lastVisit: "",
+        result: "",
+        saleAmount: 0,
+        skipLater: false
+      };
+
+      houses.push(newHouse);
+      saveHouses();
+      populateSectorDropdowns();
+      closeAddHouseModal();
+      refreshAllViews();
+      showToast("Door Added to Route");
+    }
+
+    /* =========================================================================
+       PRINT VIEW: CLEAN DOOR CHECKLIST FOR ONE STREET / SEGMENT
+       ========================================================================= */
+    function renderPrintChecklist() {
+      const sel = document.getElementById("print-segment-select");
+      const selectedKey = sel ? sel.value : "ALL";
+      const area = document.getElementById("print-checklist-area");
+      if (!area) return;
+
+      let list = houses.slice();
+      if (selectedKey && selectedKey !== "ALL") {
+        list = list.filter(h => getStreetSegmentKey(h) === selectedKey);
+      }
+
+      list.sort((a, b) => {
+        const segCmp = getStreetSegmentKey(a).localeCompare(getStreetSegmentKey(b));
+        if (segCmp !== 0) return segCmp;
+        return extractHouseNumber(a.address) - extractHouseNumber(b.address);
+      });
+
+      area.innerHTML = `
+        <div style="margin-bottom: 8px; display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid var(--accent-brass); padding-bottom: 6px;">
+          <div>
+            <strong style="font-size: 1rem; text-transform: uppercase;">Rhodes Route Ops — Field Door Checklist</strong>
+            <div style="font-size: 0.8rem; color: var(--text-muted);">Sector: ${escapeHtml(selectedKey)} (${list.length} Doors)</div>
+          </div>
+          <div class="mono" style="font-size: 0.78rem;">Date: ${getLocalDayString(new Date())}</div>
+        </div>
+        <table class="print-table">
+          <thead>
+            <tr>
+              <th style="width: 28%;">Address</th>
+              <th style="width: 14%;">Ring / Seg</th>
+              <th style="width: 26%;">Quick Check</th>
+              <th style="width: 32%;">Field Notes / Last Result</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${list.map(h => `
+              <tr>
+                <td><strong>${escapeHtml(h.address)}</strong></td>
+                <td class="mono" style="font-size: 0.75rem;">${escapeHtml(h.ring || h.segment || "-")}</td>
+                <td class="mono" style="font-size: 0.74rem;">
+                  <span class="print-check-box"></span>NA
+                  <span class="print-check-box"></span>FU
+                  <span class="print-check-box"></span>SOLD
+                  <span class="print-check-box"></span>NI
+                </td>
+                <td style="font-size: 0.78rem;">
+                  <strong>[${escapeHtml(h.status)}]</strong> ${escapeHtml(h.notes || "")}
+                </td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      `;
+    }
+
+    /* =========================================================================
+       CSV & JSON IMPORT / EXPORT / RESET DEMO DATA
+       ========================================================================= */
+    function normalizeImportedHouse(raw, idx) {
+      // Case-insensitive field lookup
+      const getField = (keys) => {
+        for (const k of Object.keys(raw)) {
+          if (keys.includes(k.toLowerCase().trim())) return raw[k];
+        }
+        return undefined;
+      };
+
+      const address   = String(getField(["address", "addr", "street_address"]) || `Unlabeled Door #${idx + 1}`).trim();
+      let street      = String(getField(["street", "street_name", "road"]) || "").trim();
+      const segment   = String(getField(["segment", "seg", "block"]) || "").trim();
+      const ring      = String(getField(["ring", "zone", "sector"]) || "").trim();
+      const latRaw    = getField(["latitude", "lat"]);
+      const lngRaw    = getField(["longitude", "lng", "lon"]);
+      const statusRaw = String(getField(["status", "state"]) || "Unvisited").trim();
+      const notes     = String(getField(["notes", "note", "comments"]) || "").trim();
+      const lastVisit = String(getField(["lastvisit", "last_visit", "visited_at"]) || "").trim();
+      const result    = String(getField(["result", "outcome"]) || "").trim();
+      const saleRaw   = getField(["saleamount", "sale_amount", "amount", "price"]);
+      const skipRaw   = getField(["skiplater", "skip_later", "comeback"]);
+
+      // Auto-extract street from address if street column is omitted
+      if (!street && address) {
+        street = address.replace(/^\s*\d+\s*/, "").replace(/\(.*?\)/g, "").trim() || "General Route";
+      }
+
+      // Normalize status to one of our 6 canonical statuses
+      let status = "Unvisited";
+      const stLower = statusRaw.toLowerCase();
+      if (HOUSE_STATUSES.includes(statusRaw)) {
+        status = statusRaw;
+      } else if (stLower.includes("sold")) {
+        status = "Sold";
+      } else if (stLower.includes("follow") || stLower.includes("interest") && !stLower.includes("not")) {
+        status = "Interested - Follow Up";
+      } else if (stLower.includes("no answer") || stLower.includes("knocked") || stLower === "na") {
+        status = "Knocked - No Answer";
+      } else if (stLower.includes("not interested") || stLower === "ni") {
+        status = "Not Interested";
+      } else if (stLower.includes("do not") || stLower.includes("dnv") || stLower.includes("no soliciting")) {
+        status = "Do Not Visit";
+      }
+
+      return {
+        id: raw.id ? String(raw.id) : ("imp-" + Date.now() + "-" + idx + "-" + Math.random().toString(36).slice(2, 6)),
+        address,
+        street,
+        segment,
+        ring,
+        latitude: latRaw !== undefined && latRaw !== "" ? parseFloat(latRaw) : null,
+        longitude: lngRaw !== undefined && lngRaw !== "" ? parseFloat(lngRaw) : null,
+        status,
+        notes,
+        lastVisit,
+        result,
+        saleAmount: saleRaw !== undefined && saleRaw !== "" ? parseFloat(saleRaw) : (status === "Sold" ? econConfig.cardPrice : 0),
+        skipLater: Boolean(skipRaw === true || skipRaw === "true" || skipRaw === "1")
+      };
+    }
+
+    // RFC-4180 Compliant CSV Parser (Handles quoted commas and newlines)
+    function parseCSVToObjects(csvText) {
+      const rows = [];
+      let currentRow = [];
+      let currentVal = "";
+      let inQuotes = false;
+
+      for (let i = 0; i < csvText.length; i++) {
+        const ch = csvText[i];
+        const nextCh = csvText[i + 1];
+
+        if (inQuotes) {
+          if (ch === '"' && nextCh === '"') {
+            currentVal += '"';
+            i++;
+          } else if (ch === '"') {
+            inQuotes = false;
+          } else {
+            currentVal += ch;
+          }
+        } else {
+          if (ch === '"') {
+            inQuotes = true;
+          } else if (ch === ",") {
+            currentRow.push(currentVal);
+            currentVal = "";
+          } else if (ch === "\n" || (ch === "\r" && nextCh === "\n")) {
+            if (ch === "\r") i++;
+            currentRow.push(currentVal);
+            if (currentRow.some(cell => cell.trim() !== "")) {
+              rows.push(currentRow);
+            }
+            currentRow = [];
+            currentVal = "";
+          } else {
+            currentVal += ch;
+          }
+        }
+      }
+      if (currentVal !== "" || currentRow.length > 0) {
+        currentRow.push(currentVal);
+        if (currentRow.some(cell => cell.trim() !== "")) {
+          rows.push(currentRow);
+        }
+      }
+
+      if (rows.length < 2) return [];
+      const headers = rows[0].map(h => h.trim());
+      return rows.slice(1).map(r => {
+        const obj = {};
+        headers.forEach((h, idx) => {
+          obj[h] = r[idx] !== undefined ? r[idx].trim() : "";
+        });
+        return obj;
+      });
+    }
+
+    function parseRawInputString(text) {
+      const trimmed = text.trim();
+      if (!trimmed) throw new Error("Empty input");
+
+      if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
+        const parsed = JSON.parse(trimmed);
+        const arr = Array.isArray(parsed) ? parsed : (parsed.houses || [parsed]);
+        return arr.map((item, idx) => normalizeImportedHouse(item, idx));
+      } else {
+        const csvObjs = parseCSVToObjects(trimmed);
+        return csvObjs.map((item, idx) => normalizeImportedHouse(item, idx));
+      }
+    }
+
+    function applyImportedHouses(importedList, mode) {
+      if (!importedList || importedList.length === 0) {
+        showToast("No valid house rows found");
+        return;
+      }
+
+      if (mode === "replace") {
+        houses = importedList;
+      } else {
+        // Merge by matching address (case-insensitive)
+        const byAddr = new Map();
+        houses.forEach(h => byAddr.set(h.address.toLowerCase(), h));
+        importedList.forEach(imp => {
+          const key = imp.address.toLowerCase();
+          if (byAddr.has(key)) {
+            const existing = byAddr.get(key);
+            Object.assign(existing, imp, { id: existing.id });
+          } else {
+            houses.push(imp);
+          }
+        });
+      }
+
+      routeQueueIndex = 0;
+      saveHouses();
+      populateSectorDropdowns();
+      refreshAllViews();
+      showToast(`Imported ${importedList.length} Doors (${mode.toUpperCase()})`);
+    }
+
+    function handleFileImport(mode) {
+      const fileInput = document.getElementById("import-file-input");
+      if (!fileInput.files || fileInput.files.length === 0) {
+        showToast("Select a .CSV or .JSON file first");
+        return;
+      }
+      const file = fileInput.files[0];
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const list = parseRawInputString(e.target.result);
+          applyImportedHouses(list, mode);
+          fileInput.value = "";
+        } catch (err) {
+          alert("Import error: " + err.message);
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    function handleRawTextImport(mode) {
+      const rawText = document.getElementById("import-raw-text").value;
+      try {
+        const list = parseRawInputString(rawText);
+        applyImportedHouses(list, mode);
+        document.getElementById("import-raw-text").value = "";
+      } catch (err) {
+        alert("Could not parse text as CSV or JSON: " + err.message);
+      }
+    }
+
+    function exportRouteJSON() {
+      const payload = {
+        app: "Rhodes Route Ops — Starving Student",
+        exportedAt: new Date().toISOString(),
+        econConfig,
+        houses
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `rhodes-route-ops-${getLocalDayString(new Date())}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast("Route JSON Exported");
+    }
+
+    function triggerQuickJSONImport() {
+      const fileInput = document.getElementById("import-file-input");
+      fileInput.click();
+    }
+
+    function resetDemoData() {
+      if (!confirm("Reset local storage back to the 12 fictional sample houses?")) return;
+      houses = JSON.parse(JSON.stringify(FICTIONAL_SAMPLE_HOUSES));
+      routeQueueIndex = 0;
+      activeRouteSector = "ALL";
+      saveHouses();
+      seedInitialDemoLogs();
+      populateSectorDropdowns();
+      refreshAllViews();
+      showToast("Demo Data Restored (12 Fictional Houses)");
+    }
+
+    function testSyncStub() {
+      SYNC_CONFIG.pushLocalStateStub("PROVO-DEMO", houses);
+      showToast("SYNC_CONFIG Stub Active (Local Only)");
+    }
+  </script>
+</body>
+</html>
