@@ -6,6 +6,9 @@
   <title>Rhodes Route Ops — Starving Student</title>
   <!-- Optional Leaflet CSS (Gracefully degrades offline) -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <!-- Firebase SDKs for cloud sync. If these fail to load (offline/blocked), the app stays local-only. -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
   <style>
     :root {
       --bg-gunmetal: #181a1b;
@@ -935,18 +938,27 @@
           <button class="btn btn-danger btn-block" onclick="resetDemoData()">Reset Demo Data (12 Fictional Houses)</button>
         </div>
 
-        <!-- Future Firebase Sync Stub UI -->
-        <div class="tac-panel" style="border-left-color: #6c757d;">
+        <!-- Cloud Sync (Firebase passphrase sync — same module as the fleet apps) -->
+        <div class="tac-panel" style="border-left-color: var(--accent-brass);">
           <div class="section-title">
-            <span>Cloud Sync Module (Stub)</span>
-            <span class="badge st-unvisited">LOCAL ONLY</span>
+            <span>Cloud Sync</span>
+            <span class="badge st-unvisited" id="syncStatusText">Sync off</span>
           </div>
           <p style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 8px;">
-            Passphrase-based Firebase sync stub is pre-wired in code (<code class="mono">SYNC_CONFIG</code>). No network credentials active.
+            Optional: enter the same squad passphrase on every phone and all devices share one live route — knocks, sales, and seller stamps included. The passphrase is hashed into a private database path; only the hash ever leaves the device.
           </p>
-          <div style="display: flex; gap: 8px;">
-            <input type="text" id="sync-passphrase-stub" placeholder="Squad Passphrase (e.g. PROVO-ALPHA-7)" disabled />
-            <button class="btn btn-charcoal" onclick="testSyncStub()">Status</button>
+          <div id="syncSetup">
+            <div style="display: flex; gap: 8px;">
+              <input type="password" id="syncPassInput" placeholder="Squad passphrase" autocomplete="off" />
+              <button class="btn btn-brass" onclick="enableSync()">Enable</button>
+            </div>
+          </div>
+          <div id="syncActive" style="display: none;">
+            <div class="mono" id="syncIdLabel" style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 8px;"></div>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-brass" style="flex: 1;" onclick="syncNow()">Sync Now</button>
+              <button class="btn btn-charcoal" style="flex: 1;" onclick="disableSync()">Turn Off</button>
+            </div>
           </div>
         </div>
       </div>
@@ -1114,30 +1126,262 @@
 
   <script>
     /* =========================================================================
-       11. CLEARLY MARKED SYNC_CONFIG STUB (FUTURE PASSPHRASE FIREBASE MODULE)
+       11. CLOUD SYNC — FIREBASE PASSPHRASE MODULE (SAME AS FLEET APPS)
        =========================================================================
        NOTE: Do not include real secrets or credentials here.
        When ready to deploy cloud squad sync, populate firebaseConfig and
        implement deriveCollectionFromPassphrase(passphrase) using SHA-256.
     ========================================================================= */
-    const SYNC_CONFIG = {
-      enabled: false,
-      provider: "firebase-firestore-stub",
-      passphraseSalt: "RHODES-ROUTE-OPS-PROVO-V1",
-      syncIntervalMs: 30000,
-      firebaseConfig: {
-        apiKey: null,            // STUB: Leave null in offline/local build
-        authDomain: null,        // STUB
-        projectId: null,         // STUB
-        storageBucket: null,     // STUB
-        messagingSenderId: null, // STUB
-        appId: null              // STUB
-      },
-      async pushLocalStateStub(passphrase, payload) {
-        console.info("[SYNC_CONFIG STUB] Cloud sync disabled. Data remains safely in localStorage.", { passphrase, count: payload.length });
-        return { ok: false, reason: "STUB_ONLY_NO_CREDENTIALS" };
-      }
+    /* =========================================================================
+       CLOUD SYNC — Firebase Realtime Database, passphrase-keyed (OPTIONAL)
+       The same proven module as Daniel's fleet / youth / leather apps,
+       including the content-hash revision-tiebreak fix (2026-10-27).
+       If Firebase can't load or no passphrase is set, the app works exactly
+       as before with local-only storage. The passphrase is hashed (SHA-256
+       with this app's salt) into an unguessable database path — the hash IS
+       the privacy. Use the same passphrase on every device.
+       ========================================================================= */
+    const FIREBASE_CONFIG = {
+      apiKey: "AIzaSyDSMbghFvaU0v1Hn-AD1Kr0NI280RRo2Vk",
+      databaseURL: "https://squatch-fleet-default-rtdb.firebaseio.com"
     };
+    const SYNC_PASS_KEY = "rhodes_route_ops_sync_pass";
+    const STORAGE_KEY_META = "rhodes_ops_starving_student_meta_v1";
+    const SYNC_SALT = "RHODES-ROUTE-OPS-PROVO-V1";
+    let syncMeta = { _rev: 0, _updatedAt: null };
+    const sync = {
+      enabled: false, db: null, ref: null, path: null,
+      pushTimer: null, listening: false, status: "off"
+    };
+
+    function loadSyncMeta() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY_META);
+        if (raw) { const m = JSON.parse(raw); if (m && typeof m._rev === "number") syncMeta = m; }
+      } catch (e) { /* fresh meta */ }
+    }
+
+    function saveSyncMeta() {
+      try { localStorage.setItem(STORAGE_KEY_META, JSON.stringify(syncMeta)); } catch (e) { console.error(e); }
+    }
+
+    function collectSyncState() {
+      return {
+        houses: houses,
+        dailyLogs: dailyLogs,
+        econConfig: econConfig,
+        _rev: syncMeta._rev || 0,
+        _updatedAt: syncMeta._updatedAt || null
+      };
+    }
+
+    // Every local change funnels through here: bump the revision, schedule a push.
+    function touchSync() {
+      syncMeta._rev = (syncMeta._rev || 0) + 1;
+      syncMeta._updatedAt = new Date().toISOString();
+      saveSyncMeta();
+      pushToCloud();
+    }
+
+    async function sha256Hex(str) {
+      try {
+        if (window.crypto && crypto.subtle && typeof crypto.subtle.digest === "function") {
+          const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(SYNC_SALT + ":" + str));
+          return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+        }
+      } catch (e) { /* fall through to non-crypto fallback below */ }
+      // Fallback for very old browsers (sync still works; path is less unguessable).
+      let h1 = 0x811c9dc5, h2 = 0x01000193;
+      const s = SYNC_SALT + ":" + str;
+      for (let i = 0; i < s.length; i++) {
+        h1 = Math.imul(h1 ^ s.charCodeAt(i), 16777619) >>> 0;
+        h2 = Math.imul(h2 ^ (s.charCodeAt(i) + 31), 16777619) >>> 0;
+      }
+      return h1.toString(16).padStart(8, "0") + h2.toString(16).padStart(8, "0") +
+             h1.toString(16).padStart(8, "0") + h2.toString(16).padStart(8, "0");
+    }
+
+    // ---- Revision-tie resolution (the 2026-10-27 fix) ----
+    // Last-write-wins by _rev breaks when two devices save the same number of
+    // times while apart: both hold the same _rev with different content and
+    // silently never converge. On a tie, compare a hash of the content
+    // (everything except _rev and _updatedAt): the lexicographically larger
+    // hash wins on every device, and the winner is re-published at _rev + 1.
+    function stableStringify(v) {
+      if (v === null || typeof v !== "object") return JSON.stringify(v);
+      if (Array.isArray(v)) return "[" + v.map(stableStringify).join(",") + "]";
+      return "{" + Object.keys(v).sort().map(k => JSON.stringify(k) + ":" + stableStringify(v[k])).join(",") + "}";
+    }
+
+    function contentHash(s) {
+      if (!s) return "";
+      const copy = {};
+      Object.keys(s).forEach(k => { if (k !== "_rev" && k !== "_updatedAt" && k !== "_hash") copy[k] = s[k]; });
+      const str = stableStringify(copy);
+      let h1 = 0x811c9dc5, h2 = 0x01000193;
+      for (let i = 0; i < str.length; i++) {
+        h1 = Math.imul(h1 ^ str.charCodeAt(i), 16777619) >>> 0;
+        h2 = Math.imul(h2 ^ (str.charCodeAt(i) + 31), 16777619) >>> 0;
+      }
+      return h1.toString(16).padStart(8, "0") + h2.toString(16).padStart(8, "0");
+    }
+
+    // 'cloud' = adopt the snapshot, 'local' = publish local state, 'same' = no-op.
+    function syncDecision(cloud) {
+      const local = collectSyncState();
+      if (!cloud || typeof cloud._rev !== "number" || !Array.isArray(cloud.houses)) {
+        return (local._rev || 0) > 0 ? "local" : "same";
+      }
+      const lr = local._rev || 0;
+      if (cloud._rev !== lr) return cloud._rev > lr ? "cloud" : "local";
+      const ch = contentHash(cloud), lh = contentHash(local);
+      if (ch === lh) return "same";
+      return ch > lh ? "cloud" : "local";
+    }
+
+    // Re-publish the winning content at _rev + 1 so every device converges.
+    function bumpAndPush() {
+      syncMeta._rev = (syncMeta._rev || 0) + 1;
+      syncMeta._updatedAt = new Date().toISOString();
+      saveSyncMeta();
+      pushToCloud();
+    }
+
+    function resolveAgainstCloud(cloud, initial) {
+      const decision = syncDecision(cloud);
+      if (decision === "same") return decision;
+      const tied = !!cloud && typeof cloud._rev === "number" && cloud._rev === (syncMeta._rev || 0);
+      if (decision === "cloud") {
+        adoptRemote(cloud, initial);
+        if (tied) bumpAndPush();
+      } else if (tied) {
+        bumpAndPush();
+      } else {
+        pushToCloud();
+      }
+      return decision;
+    }
+
+    function setSyncStatus(status, label) {
+      sync.status = status;
+      const st = document.getElementById("syncStatusText");
+      if (st) st.textContent = label || status;
+    }
+
+    function updateSyncIdLabel(hex) {
+      const l = document.getElementById("syncIdLabel");
+      if (l && hex) l.textContent = "Sync ID: " + hex.slice(0, 8) + "… (must match on all devices)";
+    }
+
+    function initSync() {
+      let pass = null;
+      try { pass = localStorage.getItem(SYNC_PASS_KEY); } catch (e) {}
+      if (!pass) { setSyncStatus("off", "Sync off"); refreshSyncUI(); return; }
+      if (!window.firebase || !window.firebase.database) { setSyncStatus("off", "Sync unavailable (offline?)"); refreshSyncUI(); return; }
+      try {
+        if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+        sync.db = firebase.database();
+      } catch (e) { console.error(e); setSyncStatus("error", "Sync init failed"); refreshSyncUI(); return; }
+      setSyncStatus("connecting", "Connecting…");
+      sha256Hex(pass).then(hex => {
+        sync.path = "routes/" + hex;
+        sync.ref = sync.db.ref(sync.path);
+        sync.enabled = true;
+        updateSyncIdLabel(hex);
+        sync.ref.once("value").then(snap => {
+          resolveAgainstCloud(snap.val(), true);
+          if (!sync.listening) {
+            sync.listening = true;
+            sync.ref.on("value", onRemoteValue, err => { console.error(err); setSyncStatus("error", "Sync error"); });
+          }
+          if (sync.status === "connecting") setSyncStatus("synced", "Synced");
+        }).catch(err => { console.error(err); setSyncStatus("error", "Sync error — check connection"); });
+      });
+      refreshSyncUI();
+    }
+
+    function onRemoteValue(snap) {
+      if (!sync.enabled) return;
+      const cloud = snap.val();
+      if (!cloud || typeof cloud._rev !== "number") return;
+      resolveAgainstCloud(cloud, false);
+    }
+
+    function adoptRemote(cloud, initial) {
+      houses = (cloud.houses || []).map(h => ({ visitedBy: "", ...h }));
+      dailyLogs = Array.isArray(cloud.dailyLogs) ? cloud.dailyLogs : [];
+      if (cloud.econConfig) econConfig = cloud.econConfig;
+      syncMeta._rev = cloud._rev || 0;
+      syncMeta._updatedAt = cloud._updatedAt || null;
+      saveSyncMeta();
+      try {
+        localStorage.setItem(STORAGE_KEY_HOUSES, JSON.stringify(houses));
+        localStorage.setItem(STORAGE_KEY_LOGS, JSON.stringify(dailyLogs));
+        localStorage.setItem(STORAGE_KEY_ECON, JSON.stringify(econConfig));
+      } catch (e) { console.error(e); }
+      const priceEl = document.getElementById("cfg-card-price");
+      const commEl = document.getElementById("cfg-card-comm");
+      if (priceEl) priceEl.value = econConfig.cardPrice || 30;
+      if (commEl) commEl.value = econConfig.cardComm || 15;
+      populateSectorDropdowns();
+      refreshAllViews();
+      if (!initial) showToast("☁️ Synced changes from another device");
+      setSyncStatus("synced", "Synced");
+    }
+
+    function pushToCloud() {
+      if (!sync.enabled || !sync.ref) return;
+      clearTimeout(sync.pushTimer);
+      sync.pushTimer = setTimeout(() => {
+        setSyncStatus("syncing", "Syncing…");
+        sync.ref.set(collectSyncState()).then(
+          () => { if (sync.status === "syncing") setSyncStatus("synced", "Synced"); },
+          err => { console.error(err); setSyncStatus("error", "Sync error"); }
+        );
+      }, 800);
+    }
+
+    function syncNow() {
+      if (!sync.enabled || !sync.ref) { showToast("Cloud sync is not enabled"); return; }
+      setSyncStatus("syncing", "Syncing…");
+      sync.ref.once("value").then(snap => {
+        if (resolveAgainstCloud(snap.val(), true) === "same" && sync.status === "syncing") {
+          setSyncStatus("synced", "Synced");
+        }
+      }).catch(err => { console.error(err); setSyncStatus("error", "Sync error"); });
+    }
+
+    function refreshSyncUI() {
+      let pass = null;
+      try { pass = localStorage.getItem(SYNC_PASS_KEY); } catch (e) {}
+      const setup = document.getElementById("syncSetup");
+      const active = document.getElementById("syncActive");
+      if (setup) setup.style.display = pass ? "none" : "block";
+      if (active) active.style.display = pass ? "block" : "none";
+      if (pass) { sha256Hex(pass).then(updateSyncIdLabel); }
+      else { const l = document.getElementById("syncIdLabel"); if (l) l.textContent = ""; }
+    }
+
+    function enableSync() {
+      const input = document.getElementById("syncPassInput");
+      const pass = (input.value || "").trim();
+      if (pass.length < 4) { alert("Please choose a passphrase at least 4 characters long."); return; }
+      try { localStorage.setItem(SYNC_PASS_KEY, pass); } catch (e) { alert("Could not save the passphrase on this device."); return; }
+      input.value = "";
+      showToast("☁️ Cloud sync enabled");
+      initSync();
+    }
+
+    function disableSync() {
+      if (!confirm("Turn off cloud sync on this device? Your local data stays put.")) return;
+      try { localStorage.removeItem(SYNC_PASS_KEY); } catch (e) {}
+      try { if (sync.ref) sync.ref.off("value"); } catch (e) {}
+      sync.enabled = false; sync.listening = false;
+      sync.ref = null; sync.db = null; sync.path = null;
+      clearTimeout(sync.pushTimer);
+      setSyncStatus("off", "Sync off");
+      refreshSyncUI();
+    }
 
     /* =========================================================================
        CONSTANTS & HOUSE STATUS DEFINITIONS
@@ -9652,9 +9896,11 @@
       loadFromStorage();
       populateSectorDropdowns();
       refreshAllViews();
+      initSync();
     });
 
     function loadFromStorage() {
+      loadSyncMeta();
       try {
         const rawHouses = localStorage.getItem(STORAGE_KEY_HOUSES);
         if (rawHouses) {
@@ -9722,6 +9968,7 @@
 
     function saveHouses() {
       localStorage.setItem(STORAGE_KEY_HOUSES, JSON.stringify(houses));
+      touchSync();
     }
 
     function recordKnockLog(houseId, status) {
@@ -9742,6 +9989,7 @@
       const comm  = parseFloat(document.getElementById("cfg-card-comm").value) || 15;
       econConfig = { cardPrice: price, cardComm: comm };
       localStorage.setItem(STORAGE_KEY_ECON, JSON.stringify(econConfig));
+      touchSync();
       refreshAllViews();
       showToast("Card Economics Saved");
     }
@@ -10907,10 +11155,6 @@
       showToast("Demo Data Restored (12 Fictional Houses)");
     }
 
-    function testSyncStub() {
-      SYNC_CONFIG.pushLocalStateStub("PROVO-DEMO", houses);
-      showToast("SYNC_CONFIG Stub Active (Local Only)");
-    }
   </script>
 </body>
 </html>
